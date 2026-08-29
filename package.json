@@ -1,0 +1,22 @@
+{
+  "name": "in-rhythm",
+  "version": "0.1.0",
+  "description": "In Rhythm - daily/weekly/bi-weekly/monthly coaching SMS for Dr. Terry Daniels' clients and community",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "seed": "node src/db/seed.js",
+    "send-test": "node src/scripts/sendTest.js",
+    "scheduler": "node src/scheduler/daemon.js",
+    "run-scheduler-once": "node src/scheduler/run.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "node-cron": "^3.0.3",
+    "stripe": "^22.6.0",
+    "twilio": "^5.3.0"
+  }
+}

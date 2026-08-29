@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In Rhythm — Daily Coaching Texts with Dr. Terry Daniels</title>
+<style>
+  :root {
+    --ink: #1c2b2a;
+    --paper: #faf7f1;
+    --accent: #2f6f5e;
+    --accent-dark: #204c40;
+    --muted: #6b7573;
+    --line: #e3ddd0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 48px 24px 80px; }
+  .eyebrow { color: var(--accent); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-size: 13px; }
+  h1 { font-size: 34px; line-height: 1.15; margin: 10px 0 12px; }
+  p.lead { color: var(--muted); font-size: 17px; margin: 0 0 32px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
+  label { display: block; font-weight: 600; font-size: 14px; margin: 18px 0 6px; }
+  label:first-of-type { margin-top: 0; }
+  input, select {
+    width: 100%; padding: 12px 14px; font-size: 16px; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff; color: var(--ink);
+  }
+  .cadence { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .cadence label {
+    margin: 0; font-weight: 500; font-size: 13px; text-align: center; padding: 10px 6px;
+    border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+  }
+  .cadence input { display: none; }
+  .cadence input:checked + span { color: var(--accent-dark); font-weight: 700; }
+  .cadence label:has(input:checked) { border-color: var(--accent); background: #eef5f1; }
+  button {
+    margin-top: 24px; width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+    background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer;
+  }
+  button:hover { background: var(--accent-dark); }
+  .fine { font-size: 12px; color: var(--muted); margin-top: 14px; }
+  .status { margin-top: 16px; font-size: 14px; font-weight: 600; display: none; }
+  .status.ok { color: var(--accent-dark); }
+  .status.err { color: #b3413a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Dr. Terry Daniels · Executive Coaching</div>
+  <h1>A short text to keep you in rhythm.</h1>
+  <p class="lead">One coaching message, sent to your phone on the schedule you choose — daily, weekly, bi-weekly, or monthly. Drawn straight from the leadership work Dr. Terry does with real clients.</p>
+
+  <div class="card">
+    <form id="signupForm">
+      <label for="name">Name</label>
+      <input id="name" name="name" required placeholder="Full name">
+
+      <label for="phone">Cell phone</label>
+      <input id="phone" name="phone" type="tel" required placeholder="(555) 555-5555">
+
+      <label>How often?</label>
+      <div class="cadence">
+        <label><input type="radio" name="cadence" value="daily" checked><span>Daily</span></label>
+        <label><input type="radio" name="cadence" value="weekly"><span>Weekly</span></label>
+        <label><input type="radio" name="cadence" value="biweekly"><span>Bi-weekly</span></label>
+        <label><input type="radio" name="cadence" value="monthly"><span>Monthly</span></label>
+      </div>
+
+      <label for="clientCode">Coaching client access code (optional)</label>
+      <input id="clientCode" name="clientCode" placeholder="Leave blank if you're not a current client">
+
+      <button type="submit">Start my texts</button>
+      <p class="fine">By signing up you agree to receive recurring SMS from In Rhythm / Dr. Terry Daniels. Msg &amp; data rates may apply. Msg frequency varies by plan. Reply STOP to cancel, HELP for help. Current coaching clients (and for 2 months after) receive this free — everyone else is billed a small monthly fee.</p>
+      <div id="status" class="status"></div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.getElementById('signupForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const statusEl = document.getElementById('status');
+  const payload = {
+    name: form.name.value,
+    phone: form.phone.value,
+    cadence: form.cadence.value,
+    clientCode: form.clientCode.value,
+  };
+  statusEl.style.display = 'block';
+  statusEl.className = 'status';
+  statusEl.textContent = 'Sending...';
+
+  try {
+    const res = await fetch('/api/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Something went wrong');
+
+    if (data.needsPayment) {
+      if (data.checkoutUrl) {
+        statusEl.className = 'status ok';
+        statusEl.textContent = "Almost there — redirecting you to complete payment...";
+        window.location = data.checkoutUrl;
+        return;
+      }
+      statusEl.className = 'status ok';
+      statusEl.textContent = "You're almost set — check your phone for a confirmation text. We'll follow up shortly to complete payment.";
+    } else {
+      statusEl.className = 'status ok';
+      statusEl.textContent = "You're in! Check your phone for a confirmation text.";
+    }
+    form.reset();
+  } catch (err) {
+    statusEl.className = 'status err';
+    statusEl.textContent = err.message;
+  }
+});
+</script>
+</body>
+</html>
