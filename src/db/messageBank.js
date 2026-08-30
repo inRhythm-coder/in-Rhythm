@@ -84,6 +84,16 @@ const BOOK_MESSAGES = [
   { theme: 'book_faith', source: 'in-rhythm-book', body: "\"Make every effort to keep the unity of the Spirit\" (Eph. 4:3). Leadership at its best is exactly that — effort, not accident, toward unity. — Dr. Terry, in-Rhythm" },
 ];
 
-const MESSAGES = [...LINKEDIN_MESSAGES, ...BOOK_MESSAGES];
+// Occasional, low-key invitations to learn more about 1:1 coaching. Mixed
+// sparingly into the normal rotation (same random pick as everything else)
+// rather than attached to every message, so it reads as a natural text
+// rather than an ad.
+const INVITE_MESSAGES = [
+  { theme: 'invite', source: 'invite', body: "Curious what working with me looks like beyond these texts? I take on a limited number of coaching clients each year. Reply here or email tdaniels@focalpointcoaching.com if you'd like to talk. — Dr. Terry" },
+  { theme: 'invite', source: 'invite', body: "These texts are just a taste of the work. If you're facing something bigger right now — a team, a transition, a decision — I do that work directly with leaders. Email me anytime: tdaniels@focalpointcoaching.com. — Dr. Terry" },
+  { theme: 'invite', source: 'invite', body: "Most of what I send here comes from real coaching conversations. If you'd ever like to have one of your own, just reply or reach me at tdaniels@focalpointcoaching.com. — Dr. Terry" },
+];
 
-module.exports = { MESSAGES, LINKEDIN_MESSAGES, BOOK_MESSAGES };
+const MESSAGES = [...LINKEDIN_MESSAGES, ...BOOK_MESSAGES, ...INVITE_MESSAGES];
+
+module.exports = { MESSAGES, LINKEDIN_MESSAGES, BOOK_MESSAGES, INVITE_MESSAGES };
