@@ -43,9 +43,12 @@ const COACH_NAME = process.env.COACH_NAME || 'Dr. Terry';
  * opt-in confirmation text as best practice (and a paper/digital trail).
  */
 function buildOptInMessage() {
+  const contact = process.env.COACH_CELL
+    ? ` Questions anytime? Text or call me directly at ${process.env.COACH_CELL}.`
+    : '';
   return (
     `Welcome to ${APP_NAME} with ${COACH_NAME}! You'll get coaching texts at the cadence you chose. ` +
-    `Msg & data rates may apply. Msg frequency varies. Reply STOP to cancel anytime, HELP for help.`
+    `Msg & data rates may apply. Msg frequency varies. Reply STOP to cancel anytime, HELP for help.${contact}`
   );
 }
 
