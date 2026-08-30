@@ -175,13 +175,113 @@ const INVITE_MESSAGES_ES = [
   { theme: 'invite', category: 'leadership', source: 'invite', language: 'es', body: "La mayoría de lo que envío aquí viene de conversaciones reales de coaching. Si alguna vez quieres tener una propia, solo responde o contáctame en tdaniels@focalpointcoaching.com. — Dr. Terry" },
 ];
 
+// Distilled from the "Through Spiritual Eyes" devotional at the end of each
+// chapter of in-Rhythm - Terry's own reflections tying each chapter's theme
+// to Scripture. Two messages per chapter/devotional, tagged category:
+// 'spiritual' so subscribers who choose Spiritual (or Both) content receive
+// these; a 'leadership'-only subscriber never sees them.
+const BOOK_SPIRITUAL_MESSAGES = [
+  // -- The Pulse of Connection --
+  { theme: 'faith_connection', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "Every conversation has a rhythm. Jesus met the woman at the well right where she was, not where He wanted her to be (John 4). Meet people there first — depth comes after. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_connection', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"Be quick to listen, slow to speak\" (James 1:19). Listening is tapping your foot to the beat before you dance. Get in rhythm before you respond. — Dr. Terry, in-Rhythm" },
+
+  // -- Fine-tuning Your Response --
+  { theme: 'faith_listening', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "God didn't speak to Elijah in the wind or fire — He came in a gentle whisper (1 Kings 19). Sometimes the most spiritual thing you can do in a conversation is go quiet. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_listening', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"To answer before listening — that is folly and shame\" (Prov. 18:13). Set your agenda down for one conversation today and just listen. — Dr. Terry, in-Rhythm" },
+
+  // -- In-Sync or Sink in Conversation --
+  { theme: 'faith_sync', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "Jesus talked nets with fishermen and parables with farmers (Matt. 4:19, Mark 4). He never forced people into His style — He stepped into theirs. Who do you need to meet in their language today? — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_sync', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"A gentle answer turns away wrath\" (Prov. 15:1). Adapting how you communicate isn't losing yourself — it's valuing the other person above your own comfort (Phil. 2:3-4). — Dr. Terry, in-Rhythm" },
+
+  // -- The Beat of Empathy --
+  { theme: 'faith_empathy', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "Jesus didn't open with a theology lesson at Lazarus's tomb — He wept with Mary and Martha first (John 11:35). Sometimes the holiest response is simply feeling it with someone. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_empathy', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"The purposes of a person's heart are deep waters, but one who has insight draws them out\" (Prov. 20:5). Empathy is wading in without making waves. — Dr. Terry, in-Rhythm" },
+
+  // -- Tempo and Timing --
+  { theme: 'faith_timing', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "With Nicodemus, Jesus let the conversation unfold slowly (John 3). With blind Bartimaeus, He moved decisively: \"What do you want me to do for you?\" (Mark 10:51). Discernment knows the difference. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_timing', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"A time to be silent and a time to speak\" (Eccl. 3:7). Today's leadership question: which one does this moment actually need from you? — Dr. Terry, in-Rhythm" },
+
+  // -- Tearing Down Walls and Building Bridges --
+  { theme: 'faith_bridges', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"Will you give me a drink?\" Jesus broke a cultural wall down with one simple, human question (John 4). Sometimes bridging starts smaller than you think. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_bridges', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"The tongue has the power of life and death\" (Prov. 18:21). Use yours today to build someone up (Eph. 4:29) — even if it's just, \"How are you really doing?\" — Dr. Terry, in-Rhythm" },
+
+  // -- Building Harmony Takes Work --
+  { theme: 'faith_trust', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "Jesus built trust with Zacchaeus not with a lecture, but by inviting Himself to dinner (Luke 19). Trust is rarely won in one big gesture — it's built one interaction at a time. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_trust', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"Let love and faithfulness never leave you... write them on the tablet of your heart\" (Prov. 3:3-4). Credibility is just faithfulness, repeated. — Dr. Terry, in-Rhythm" },
+
+  // -- Reflecting Peace and Unity Beyond Discord --
+  { theme: 'faith_conflict', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "After Peter's three denials, Jesus didn't shame him — He asked three times, \"Do you love me?\" (John 21). Restoration, not condemnation, is the goal of godly conflict. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_conflict', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"Be quick to listen, slow to speak, and slow to become angry\" (James 1:19) — applies double in conflict. Take the rest note before you respond. — Dr. Terry, in-Rhythm" },
+
+  // -- Being Noticed for Genuine Communication --
+  { theme: 'faith_nonverbal', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "Jesus didn't just tell the children they were welcome — He took them in His arms (Mark 10:13-16). Your body language either confirms your words or contradicts them. Which is it today? — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_nonverbal', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"As water reflects the face, so one's life reflects the heart\" (Prov. 27:19). People read your heart before they hear your words. — Dr. Terry, in-Rhythm" },
+
+  // -- The Joy of Natural Guidance in Conversation --
+  { theme: 'faith_flow', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "On the road to Emmaus, Jesus didn't dump answers on two discouraged disciples — He asked questions and let understanding unfold (Luke 24). Good guidance is patient. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_flow', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"Gracious words are a honeycomb, sweet to the soul\" (Prov. 16:24). Today, guide one conversation with sweetness instead of force. — Dr. Terry, in-Rhythm" },
+
+  // -- Steady Presence in an Out-of-tune World --
+  { theme: 'faith_consistency', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"Many claim unfailing love, but a faithful person, who can find?\" (Prov. 20:6). Be the steady one. Same person Monday morning as Sunday afternoon. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_consistency', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"Let us not become weary in doing good\" (Gal. 6:9). Consistency isn't a personality trait — it's a decision you make again tomorrow. — Dr. Terry, in-Rhythm" },
+
+  // -- Inspiring Leadership Leads Through Purpose --
+  { theme: 'faith_leadership', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "Fishermen, tax collectors, zealots — Jesus built one team out of people who had nothing in common (the Gospels). Leadership is conducting a symphony, not playing every instrument yourself. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_leadership', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"If any of you lacks wisdom, ask God, who gives generously\" (James 1:5). Feeling out of rhythm as a leader? Start there. — Dr. Terry, in-Rhythm" },
+
+  // -- Vision Plus Purpose Leads to Impact --
+  { theme: 'faith_vision', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"Follow me... love one another... go and make disciples\" — Jesus gave His team direction, reinforcement, and a mission (the Gospels). That's organizational rhythm. Does yours have all three? — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_vision', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'en', body: "\"Where there is no vision, the people perish\" (Prov. 29:18). Rhythm is what turns vision into daily action. — Dr. Terry, in-Rhythm" },
+];
+
+const BOOK_SPIRITUAL_MESSAGES_ES = [
+  { theme: 'faith_connection', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "Cada conversación tiene un ritmo. Jesús se encontró con la samaritana justo donde ella estaba, no donde Él quería que estuviera (Juan 4). Encuentra primero a las personas ahí — la profundidad viene después. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_connection', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Sean rápidos para escuchar, lentos para hablar\" (Santiago 1:19). Escuchar es seguir el compás con el pie antes de bailar. Entra en ritmo antes de responder. — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_listening', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "Dios no le habló a Elías en el viento ni en el fuego — vino en un susurro suave (1 Reyes 19). A veces lo más espiritual que puedes hacer en una conversación es guardar silencio. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_listening', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Responder antes de escuchar es necedad y vergüenza\" (Prov. 18:13). Suelta tu agenda por una conversación hoy y solo escucha. — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_sync', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "Jesús habló de redes con los pescadores y de parábolas con los agricultores (Mat. 4:19, Marcos 4). Nunca obligó a nadie a adaptarse a Su estilo — Él entraba al de ellos. ¿A quién necesitas encontrar hoy en su propio idioma? — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_sync', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"La respuesta amable calma el enojo\" (Prov. 15:1). Adaptar cómo te comunicas no es perderte a ti mismo — es valorar al otro más que tu propia comodidad (Fil. 2:3-4). — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_empathy', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "Jesús no abrió con una lección de teología en la tumba de Lázaro — lloró junto a María y Marta primero (Juan 11:35). A veces la respuesta más santa es simplemente sentirlo junto a alguien. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_empathy', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Aguas profundas son los propósitos del corazón humano, pero el hombre entendido los sacará a la luz\" (Prov. 20:5). La empatía es entrar en esas aguas sin hacer olas. — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_timing', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "Con Nicodemo, Jesús dejó que la conversación se desarrollara despacio (Juan 3). Con el mendigo ciego, actuó con decisión: \"¿Qué quieres que haga por ti?\" (Marcos 10:51). El discernimiento sabe la diferencia. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_timing', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Tiempo de callar, y tiempo de hablar\" (Ecl. 3:7). La pregunta de liderazgo de hoy: ¿cuál de los dos necesita este momento de ti? — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_bridges', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"¿Me das de beber?\" Jesús derribó una barrera cultural con una sola pregunta sencilla y humana (Juan 4). A veces construir un puente empieza más pequeño de lo que crees. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_bridges', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"La lengua tiene poder de vida y muerte\" (Prov. 18:21). Usa la tuya hoy para edificar a alguien (Ef. 4:29) — aunque sea solo un \"¿cómo estás en verdad?\". — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_trust', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "Jesús construyó confianza con Zaqueo no con un sermón, sino invitándose a cenar en su casa (Lucas 19). La confianza rara vez se gana en un solo gran gesto — se construye una conversación a la vez. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_trust', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Nunca se aparten de ti el amor y la verdad... escríbelos en la tabla de tu corazón\" (Prov. 3:3-4). La credibilidad no es más que fidelidad, repetida. — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_conflict', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "Después de las tres negaciones de Pedro, Jesús no lo avergonzó — le preguntó tres veces, \"¿Me amas?\" (Juan 21). La restauración, no la condena, es la meta de un conflicto manejado con fe. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_conflict', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Sean rápidos para escuchar, lentos para hablar y lentos para enojarse\" (Santiago 1:19) — aplica el doble en un conflicto. Toma el respiro antes de responder. — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_nonverbal', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "Jesús no solo les dijo a los niños que eran bienvenidos — los tomó en sus brazos (Marcos 10:13-16). Tu lenguaje corporal, o confirma tus palabras, o las contradice. ¿Cuál de las dos hace hoy? — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_nonverbal', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Como en el agua el rostro corresponde al rostro, así el corazón del hombre al hombre\" (Prov. 27:19). La gente lee tu corazón antes de escuchar tus palabras. — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_flow', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "En el camino a Emaús, Jesús no les dio todas las respuestas a dos discípulos desanimados — hizo preguntas y dejó que la comprensión se revelara poco a poco (Lucas 24). Guiar bien requiere paciencia. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_flow', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Panal de miel son las palabras amables, dulces al alma\" (Prov. 16:24). Hoy, guía una conversación con dulzura en lugar de fuerza. — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_consistency', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Muchos hombres proclaman su propia bondad, pero ¿quién hallará a un hombre fiel?\" (Prov. 20:6). Sé esa persona constante. El mismo lunes por la mañana que el domingo por la tarde. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_consistency', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"No nos cansemos de hacer el bien\" (Gál. 6:9). La constancia no es un rasgo de personalidad — es una decisión que vuelves a tomar mañana. — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_leadership', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "Pescadores, cobradores de impuestos, zelotes — Jesús construyó un solo equipo con personas que no tenían nada en común (los Evangelios). Liderar es dirigir una sinfonía, no tocar cada instrumento tú mismo. — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_leadership', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Si a alguno le falta sabiduría, pídala a Dios, quien da a todos generosamente\" (Santiago 1:5). ¿Sientes que como líder estás fuera de ritmo? Empieza ahí. — Dr. Terry, in-Rhythm" },
+
+  { theme: 'faith_vision', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Síganme... ámense unos a otros... vayan y hagan discípulos\" — Jesús le dio a su equipo dirección, refuerzo constante y una misión (los Evangelios). Eso es ritmo organizacional. ¿El tuyo tiene los tres? — Dr. Terry, in-Rhythm" },
+  { theme: 'faith_vision', category: 'spiritual', source: 'in-rhythm-book-spiritual', language: 'es', body: "\"Donde no hay visión, el pueblo perece\" (Prov. 29:18). El ritmo es lo que convierte la visión en acción diaria. — Dr. Terry, in-Rhythm" },
+];
+
 const MESSAGES = [
-  ...LINKEDIN_MESSAGES, ...BOOK_MESSAGES, ...INVITE_MESSAGES,
-  ...LINKEDIN_MESSAGES_ES, ...BOOK_MESSAGES_ES, ...INVITE_MESSAGES_ES,
+  ...LINKEDIN_MESSAGES, ...BOOK_MESSAGES, ...INVITE_MESSAGES, ...BOOK_SPIRITUAL_MESSAGES,
+  ...LINKEDIN_MESSAGES_ES, ...BOOK_MESSAGES_ES, ...INVITE_MESSAGES_ES, ...BOOK_SPIRITUAL_MESSAGES_ES,
 ];
 
 module.exports = {
   MESSAGES,
-  LINKEDIN_MESSAGES, BOOK_MESSAGES, INVITE_MESSAGES,
-  LINKEDIN_MESSAGES_ES, BOOK_MESSAGES_ES, INVITE_MESSAGES_ES,
+  LINKEDIN_MESSAGES, BOOK_MESSAGES, INVITE_MESSAGES, BOOK_SPIRITUAL_MESSAGES,
+  LINKEDIN_MESSAGES_ES, BOOK_MESSAGES_ES, INVITE_MESSAGES_ES, BOOK_SPIRITUAL_MESSAGES_ES,
 };
