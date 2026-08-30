@@ -18,7 +18,7 @@ function toE164(raw) {
 
 router.post('/api/signup', async (req, res) => {
   try {
-    const { name, phone, cadence, clientCode, email, preferredLanguage } = req.body;
+    const { name, phone, cadence, clientCode, email, preferredLanguage, contentPreference } = req.body;
 
     if (!name || !phone || !cadence) {
       return res.status(400).json({ error: 'name, phone, and cadence are required' });
@@ -27,6 +27,7 @@ router.post('/api/signup', async (req, res) => {
       return res.status(400).json({ error: 'invalid cadence' });
     }
     const language = preferredLanguage === 'es' ? 'es' : 'en';
+    const content = ['leadership', 'spiritual', 'both'].includes(contentPreference) ? contentPreference : 'both';
 
     const e164 = toE164(phone);
     if (!e164) {
@@ -44,9 +45,9 @@ router.post('/api/signup', async (req, res) => {
     const accessType = isClientCode ? 'client' : 'paid';
 
     const result = db.prepare(`
-      INSERT INTO subscribers (name, phone, cadence, status, access_type, email, preferred_language, consent_given_at, consent_ip, next_send_at)
-      VALUES (?, ?, ?, 'pending_confirmation', ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
-    `).run(name, e164, cadence, accessType, email || null, language, req.ip);
+      INSERT INTO subscribers (name, phone, cadence, status, access_type, email, preferred_language, content_preference, consent_given_at, consent_ip, next_send_at)
+      VALUES (?, ?, ?, 'pending_confirmation', ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+    `).run(name, e164, cadence, accessType, email || null, language, content, req.ip);
 
     if (isClientCode) {
       markAsClient(result.lastInsertRowid, { engagementStart: new Date().toISOString().slice(0, 10) });

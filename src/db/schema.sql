@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS subscribers (
   email TEXT,                          -- optional, collected at signup
   preferred_language TEXT NOT NULL DEFAULT 'en'
     CHECK (preferred_language IN ('en','es')),
+  content_preference TEXT NOT NULL DEFAULT 'both'
+    CHECK (content_preference IN ('leadership','spiritual','both')),
 
   -- Access type drives whether they're billed
   access_type TEXT NOT NULL DEFAULT 'paid'
@@ -47,6 +49,7 @@ CREATE TABLE IF NOT EXISTS messages (
   theme TEXT NOT NULL,                 -- e.g. 'leadership', 'dei', 'resilience', 'faith', 'purpose'
   source TEXT,                         -- e.g. linkedin post id/url this was derived from
   language TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en','es')),
+  category TEXT NOT NULL DEFAULT 'leadership' CHECK (category IN ('leadership','spiritual')),
   active INTEGER NOT NULL DEFAULT 1,   -- 1 = eligible to send, 0 = retired/needs review
   approved INTEGER NOT NULL DEFAULT 0, -- Terry has reviewed/approved this message
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP

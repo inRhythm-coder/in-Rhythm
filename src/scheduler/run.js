@@ -22,23 +22,43 @@ function pickMessageFor(subscriber) {
     .all(subscriber.id).map(r => r.message_id);
 
   const language = subscriber.preferred_language === 'es' ? 'es' : 'en';
+  // 'both' (or unset) means no category filter at all - mixed rotation.
+  const contentPref = (subscriber.content_preference === 'leadership' || subscriber.content_preference === 'spiritual')
+    ? subscriber.content_preference
+    : null;
+
+  let baseWhere = 'active = 1 AND approved = 1 AND language = ?';
+  const baseParams = [language];
+  if (contentPref) {
+    baseWhere += ' AND category = ?';
+    baseParams.push(contentPref);
+  }
+
   const placeholders = sentIds.length ? sentIds.map(() => '?').join(',') : null;
-  const baseWhere = 'active = 1 AND approved = 1 AND language = ?';
 
   let row;
   if (placeholders) {
     row = db.prepare(
       `SELECT * FROM messages WHERE ${baseWhere} AND id NOT IN (${placeholders}) ORDER BY RANDOM() LIMIT 1`
-    ).get(language, ...sentIds);
+    ).get(...baseParams, ...sentIds);
   }
   if (!row) {
     // exhausted the bank -> recycle, oldest-sent-to-this-person first is fine via random
-    row = db.prepare(`SELECT * FROM messages WHERE ${baseWhere} ORDER BY RANDOM() LIMIT 1`).get(language);
+    row = db.prepare(`SELECT * FROM messages WHERE ${baseWhere} ORDER BY RANDOM() LIMIT 1`).get(...baseParams);
   }
   if (!row && language !== 'en') {
     // fallback safety net: if a language pool is ever empty, don't skip the
-    // subscriber entirely - fall back to English rather than send nothing.
-    row = db.prepare(`SELECT * FROM messages WHERE active = 1 AND approved = 1 AND language = 'en' ORDER BY RANDOM() LIMIT 1`).get();
+    // subscriber entirely - fall back to English rather than send nothing
+    // (still honoring their content preference if we can).
+    let fallbackWhere = "active = 1 AND approved = 1 AND language = 'en'";
+    const fallbackParams = [];
+    if (contentPref) { fallbackWhere += ' AND category = ?'; fallbackParams.push(contentPref); }
+    row = db.prepare(`SELECT * FROM messages WHERE ${fallbackWhere} ORDER BY RANDOM() LIMIT 1`).get(...fallbackParams);
+  }
+  if (!row && contentPref) {
+    // last resort: their chosen category is empty for every language they'd
+    // accept - send something rather than nothing.
+    row = db.prepare(`SELECT * FROM messages WHERE active = 1 AND approved = 1 AND language = ? ORDER BY RANDOM() LIMIT 1`).get(language);
   }
   return row;
 }

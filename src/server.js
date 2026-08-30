@@ -8,6 +8,7 @@ const { runOnce } = require('./scheduler/run');
 
 const signupRouter = require('./routes/signup');
 const { webhookRouter, apiRouter: billingApiRouter } = require('./routes/billing');
+const adminRouter = require('./routes/admin');
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use(signupRouter);
 app.use(billingApiRouter);
+app.use(adminRouter);
 
 app.get('/healthz', (req, res) => res.json({ ok: true, app: process.env.APP_NAME || 'In Rhythm' }));
 

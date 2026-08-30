@@ -9,8 +9,8 @@ function autoSeedMessages() {
   const existingBodies = new Set(existing.map(row => row.body));
 
   const insert = db.prepare(`
-    INSERT INTO messages (body, theme, source, language, active, approved)
-    VALUES (@body, @theme, @source, @language, 1, 1)
+    INSERT INTO messages (body, theme, source, language, category, active, approved)
+    VALUES (@body, @theme, @source, @language, @category, 1, 1)
   `);
 
   let added = 0;

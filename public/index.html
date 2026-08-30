@@ -82,6 +82,13 @@
         <label><input type="radio" name="preferredLanguage" value="es"><span>Español</span></label>
       </div>
 
+      <label>What kind of messages?</label>
+      <div class="cadence" style="grid-template-columns: repeat(3, 1fr);">
+        <label><input type="radio" name="contentPreference" value="both" checked><span>Both</span></label>
+        <label><input type="radio" name="contentPreference" value="leadership"><span>Leadership</span></label>
+        <label><input type="radio" name="contentPreference" value="spiritual"><span>Spiritual</span></label>
+      </div>
+
       <label for="clientCode">Coaching client access code (optional)</label>
       <input id="clientCode" name="clientCode" placeholder="Leave blank if you're not a current client">
 
@@ -105,6 +112,7 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
     email: form.email.value,
     cadence: form.cadence.value,
     preferredLanguage: form.preferredLanguage.value,
+    contentPreference: form.contentPreference.value,
     clientCode: form.clientCode.value,
   };
   statusEl.style.display = 'block';
