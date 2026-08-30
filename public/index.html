@@ -82,11 +82,11 @@
         <label><input type="radio" name="preferredLanguage" value="es"><span>Español</span></label>
       </div>
 
-      <label>What kind of messages?</label>
+      <label>What kind of messages? <span style="font-weight:400; color:var(--muted);">(required)</span></label>
       <div class="cadence" style="grid-template-columns: repeat(3, 1fr);">
-        <label><input type="radio" name="contentPreference" value="both" checked><span>Both</span></label>
-        <label><input type="radio" name="contentPreference" value="leadership"><span>Leadership</span></label>
-        <label><input type="radio" name="contentPreference" value="spiritual"><span>Spiritual</span></label>
+        <label><input type="radio" name="contentPreference" value="leadership" required><span>Leadership</span></label>
+        <label><input type="radio" name="contentPreference" value="spiritual" required><span>Spiritual</span></label>
+        <label><input type="radio" name="contentPreference" value="both" required><span>Both</span></label>
       </div>
 
       <label for="clientCode">Coaching client access code (optional)</label>
@@ -106,6 +106,14 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
   const statusEl = document.getElementById('status');
+
+  if (!form.contentPreference.value) {
+    statusEl.style.display = 'block';
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Please choose Leadership, Spiritual, or Both for your messages.';
+    return;
+  }
+
   const payload = {
     name: form.name.value,
     phone: form.phone.value,

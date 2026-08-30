@@ -26,8 +26,13 @@ router.post('/api/signup', async (req, res) => {
     if (!['daily', 'weekly', 'biweekly', 'monthly'].includes(cadence)) {
       return res.status(400).json({ error: 'invalid cadence' });
     }
+    // Content preference must be an explicit choice - no silent default to
+    // "both", so every subscriber has actively told us what they want.
+    if (!['leadership', 'spiritual', 'both'].includes(contentPreference)) {
+      return res.status(400).json({ error: 'please choose leadership, spiritual, or both for your messages' });
+    }
     const language = preferredLanguage === 'es' ? 'es' : 'en';
-    const content = ['leadership', 'spiritual', 'both'].includes(contentPreference) ? contentPreference : 'both';
+    const content = contentPreference;
 
     const e164 = toE164(phone);
     if (!e164) {
