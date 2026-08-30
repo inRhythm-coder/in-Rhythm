@@ -52,4 +52,23 @@ function buildOptInMessage() {
   );
 }
 
-module.exports = { sendSms, buildOptInMessage };
+/**
+ * Fire-and-forget text to the coach's own cell when a new subscriber signs
+ * up. Uses the same Twilio setup as everything else - no separate service
+ * needed. Safe to call even if COACH_CELL isn't set (just no-ops).
+ */
+async function notifyCoachOfNewSubscriber({ name, phone, cadence, email }) {
+  if (!process.env.COACH_CELL) return;
+  const digits = process.env.COACH_CELL.replace(/\D/g, '');
+  const coachE164 = digits.length === 10 ? `+1${digits}` : digits.length === 11 ? `+${digits}` : null;
+  if (!coachE164) return;
+  const emailPart = email ? `, ${email}` : '';
+  const body = `New In Rhythm subscriber: ${name}, ${phone}${emailPart} (${cadence}).`;
+  try {
+    await sendSms(coachE164, body);
+  } catch (err) {
+    console.error('[notify] failed to text coach about new subscriber:', err.message);
+  }
+}
+
+module.exports = { sendSms, buildOptInMessage, notifyCoachOfNewSubscriber };

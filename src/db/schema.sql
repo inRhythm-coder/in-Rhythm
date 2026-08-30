@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS subscribers (
   status TEXT NOT NULL DEFAULT 'pending_confirmation'
     CHECK (status IN ('pending_confirmation','active','paused','unsubscribed')),
 
+  email TEXT,                          -- optional, collected at signup
+  preferred_language TEXT NOT NULL DEFAULT 'en'
+    CHECK (preferred_language IN ('en','es')),
+
   -- Access type drives whether they're billed
   access_type TEXT NOT NULL DEFAULT 'paid'
     CHECK (access_type IN ('paid','client','client_tail','comp')),
@@ -42,6 +46,7 @@ CREATE TABLE IF NOT EXISTS messages (
   body TEXT NOT NULL,                  -- the SMS text itself, <=320 chars target
   theme TEXT NOT NULL,                 -- e.g. 'leadership', 'dei', 'resilience', 'faith', 'purpose'
   source TEXT,                         -- e.g. linkedin post id/url this was derived from
+  language TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en','es')),
   active INTEGER NOT NULL DEFAULT 1,   -- 1 = eligible to send, 0 = retired/needs review
   approved INTEGER NOT NULL DEFAULT 0, -- Terry has reviewed/approved this message
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP

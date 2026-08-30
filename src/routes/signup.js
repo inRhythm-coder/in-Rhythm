@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { markAsClient } = require('../db/access');
-const { sendSms, buildOptInMessage } = require('../sms/twilio');
+const { sendSms, buildOptInMessage, notifyCoachOfNewSubscriber } = require('../sms/twilio');
 const { createCheckoutSession } = require('../billing/stripe');
 
 const router = express.Router();
@@ -18,7 +18,7 @@ function toE164(raw) {
 
 router.post('/api/signup', async (req, res) => {
   try {
-    const { name, phone, cadence, clientCode } = req.body;
+    const { name, phone, cadence, clientCode, email, preferredLanguage } = req.body;
 
     if (!name || !phone || !cadence) {
       return res.status(400).json({ error: 'name, phone, and cadence are required' });
@@ -26,6 +26,7 @@ router.post('/api/signup', async (req, res) => {
     if (!['daily', 'weekly', 'biweekly', 'monthly'].includes(cadence)) {
       return res.status(400).json({ error: 'invalid cadence' });
     }
+    const language = preferredLanguage === 'es' ? 'es' : 'en';
 
     const e164 = toE164(phone);
     if (!e164) {
@@ -43,9 +44,9 @@ router.post('/api/signup', async (req, res) => {
     const accessType = isClientCode ? 'client' : 'paid';
 
     const result = db.prepare(`
-      INSERT INTO subscribers (name, phone, cadence, status, access_type, consent_given_at, consent_ip, next_send_at)
-      VALUES (?, ?, ?, 'pending_confirmation', ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
-    `).run(name, e164, cadence, accessType, req.ip);
+      INSERT INTO subscribers (name, phone, cadence, status, access_type, email, preferred_language, consent_given_at, consent_ip, next_send_at)
+      VALUES (?, ?, ?, 'pending_confirmation', ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+    `).run(name, e164, cadence, accessType, email || null, language, req.ip);
 
     if (isClientCode) {
       markAsClient(result.lastInsertRowid, { engagementStart: new Date().toISOString().slice(0, 10) });
@@ -62,6 +63,10 @@ router.post('/api/signup', async (req, res) => {
       // subscriber stays 'pending_confirmation' for manual follow-up.
       console.error('[signup] opt-in SMS failed:', smsErr.message);
     }
+
+    // Let Terry know a new subscriber just signed up (best-effort, never
+    // blocks or fails the signup itself).
+    notifyCoachOfNewSubscriber({ name, phone: e164, cadence, email }).catch(() => {});
 
     const needsPayment = accessType === 'paid';
     let checkoutUrl = null;

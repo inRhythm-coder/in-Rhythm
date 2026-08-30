@@ -21,18 +21,24 @@ function pickMessageFor(subscriber) {
   const sentIds = db.prepare('SELECT message_id FROM sends WHERE subscriber_id = ?')
     .all(subscriber.id).map(r => r.message_id);
 
+  const language = subscriber.preferred_language === 'es' ? 'es' : 'en';
   const placeholders = sentIds.length ? sentIds.map(() => '?').join(',') : null;
-  const baseWhere = 'active = 1 AND approved = 1';
+  const baseWhere = 'active = 1 AND approved = 1 AND language = ?';
 
   let row;
   if (placeholders) {
     row = db.prepare(
       `SELECT * FROM messages WHERE ${baseWhere} AND id NOT IN (${placeholders}) ORDER BY RANDOM() LIMIT 1`
-    ).get(...sentIds);
+    ).get(language, ...sentIds);
   }
   if (!row) {
     // exhausted the bank -> recycle, oldest-sent-to-this-person first is fine via random
-    row = db.prepare(`SELECT * FROM messages WHERE ${baseWhere} ORDER BY RANDOM() LIMIT 1`).get();
+    row = db.prepare(`SELECT * FROM messages WHERE ${baseWhere} ORDER BY RANDOM() LIMIT 1`).get(language);
+  }
+  if (!row && language !== 'en') {
+    // fallback safety net: if a language pool is ever empty, don't skip the
+    // subscriber entirely - fall back to English rather than send nothing.
+    row = db.prepare(`SELECT * FROM messages WHERE active = 1 AND approved = 1 AND language = 'en' ORDER BY RANDOM() LIMIT 1`).get();
   }
   return row;
 }

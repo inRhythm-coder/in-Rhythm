@@ -13,4 +13,21 @@ db.pragma('foreign_keys = ON');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
+// Lightweight migrations: schema.sql only runs CREATE TABLE IF NOT EXISTS,
+// so a table that already existed before a column was added to schema.sql
+// won't pick it up automatically. Add any newly-introduced columns here,
+// guarded so this is safe to run on every boot.
+function columnExists(table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === column);
+}
+function addColumnIfMissing(table, column, definition) {
+  if (!columnExists(table, column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`[migrate] added ${table}.${column}`);
+  }
+}
+addColumnIfMissing('subscribers', 'email', 'TEXT');
+addColumnIfMissing('subscribers', 'preferred_language', "TEXT NOT NULL DEFAULT 'en'");
+addColumnIfMissing('messages', 'language', "TEXT NOT NULL DEFAULT 'en'");
+
 module.exports = db;
