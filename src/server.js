@@ -1,12 +1,20 @@
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
+const cron = require('node-cron');
 require('./db'); // ensures schema is created on boot
+const { autoSeedMessages } = require('./db/autoSeed');
+const { runOnce } = require('./scheduler/run');
 
 const signupRouter = require('./routes/signup');
 const { webhookRouter, apiRouter: billingApiRouter } = require('./routes/billing');
 
 const app = express();
+
+// Load/refresh the message bank on every boot. This is idempotent (it
+// skips messages that already exist by exact text), so it's safe to run
+// on every deploy - new content added to messageBank.js just shows up.
+autoSeedMessages();
 
 // Stripe webhook needs the raw body, so mount it BEFORE express.json()
 // swallows the request into parsed JSON.
@@ -25,3 +33,20 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`${process.env.APP_NAME || 'In Rhythm'} running on http://localhost:${PORT}`);
 });
+
+// --- In-process scheduler ---
+// Runs in the SAME process as the web server, so it shares the same
+// database file - no separate "worker" service needed, and no risk of the
+// scheduler looking at an empty/different database than the one signups
+// actually land in. Sweeps once a day; each subscriber's own next_send_at
+// (based on their chosen cadence) determines who actually gets texted.
+const SCHEDULE = process.env.SCHEDULER_CRON || '0 9 * * *'; // default: 9am server time, daily
+console.log(`[scheduler] running in-process, sweep cron: "${SCHEDULE}"`);
+cron.schedule(SCHEDULE, () => {
+  console.log(`[scheduler] sweep starting at ${new Date().toISOString()}`);
+  runOnce().catch(err => console.error('[scheduler] sweep error:', err));
+});
+// Also sweep once shortly after boot, so a fresh deploy doesn't wait a full day
+setTimeout(() => {
+  runOnce().catch(err => console.error('[scheduler] initial sweep error:', err));
+}, 10000);

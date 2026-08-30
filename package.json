@@ -8,7 +8,6 @@
     "start": "node src/server.js",
     "seed": "node src/db/seed.js",
     "send-test": "node src/scripts/sendTest.js",
-    "scheduler": "node src/scheduler/daemon.js",
     "run-scheduler-once": "node src/scheduler/run.js"
   },
   "dependencies": {

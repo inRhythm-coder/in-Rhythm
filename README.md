@@ -8,10 +8,14 @@ Daily/weekly/bi-weekly/monthly coaching SMS for Dr. Terry Daniels' clients and c
 - **Database** (SQLite, `data/in-rhythm.db`) — subscribers, message bank, send log
 - **Access logic** (`src/db/access.js`) — active clients get free access; when an
   engagement ends, they auto-stay free for 2 months, then flip to paid
-- **Content bank** — 30 coaching texts seeded from your actual LinkedIn posts
-  (`src/db/seed.js`), tagged by theme, ready to send
-- **Scheduler** (`src/scheduler/`) — sends each subscriber a message on their
-  chosen cadence, never repeating a message until the bank is exhausted
+- **Content bank** (`src/db/messageBank.js`) — 52 coaching texts: 30 from your
+  LinkedIn posts plus 22 distilled from *in-Rhythm: The Key to Purposeful
+  Engagement*, tagged by theme and source, ready to send. Auto-loaded on every
+  boot (idempotent — safe to redeploy, new content just shows up)
+- **Scheduler** (`src/scheduler/`) — runs in the same process as the web
+  server (no separate worker needed), sweeps once a day, and sends each
+  subscriber a message on their own chosen cadence, never repeating a
+  message until the bank is exhausted
 - **Twilio integration** (`src/sms/twilio.js`) — sends the texts, plus a
   TCPA-style opt-in confirmation message
 - **Stripe integration** (`src/billing/stripe.js`, `src/routes/billing.js`) —
@@ -52,27 +56,35 @@ You're charging money for recurring texts, so get these right:
 ```
 npm install
 cp .env.example .env        # fill in your Twilio (and later Stripe) keys
-npm run seed                 # loads the 30 starter messages
-npm start                    # runs the signup site on http://localhost:3000
-npm run scheduler            # separate process: sends texts on schedule
+npm start                    # runs the signup site AND the scheduler on
+                              # http://localhost:3000 - the message bank is
+                              # loaded automatically on boot
 ```
+
+`npm run seed` also works if you just want to load the message bank into a
+local dev database without starting the server.
 
 ## Deploying for real
 
-This needs to run on a real host with normal internet access (this build
-sandbox's network is locked down and can't reach Twilio directly — that's
-sandbox-only, not a code issue). Recommended: **Railway** or **Render**,
-~$20–50/mo total:
+This needs to run on a real host with normal internet access. Recommended:
+**Railway** or **Render**, ~$20–50/mo total:
 
 1. Push this project to a GitHub repo (private is fine)
-2. Create two processes on your host:
-   - **web**: `npm start` — serves the signup page
-   - **worker**: `npm run scheduler` — sends the scheduled texts, runs
-     continuously in the background
+2. Create a single web process on your host: `npm start` — this serves the
+   signup page AND runs the daily scheduler sweep in the background, in the
+   same process. (Earlier drafts of this README described a separate
+   "worker" process for the scheduler — that's no longer needed. Running it
+   as a second process would give it its own empty database and it would
+   never see any signups, so don't split it out.)
 3. Set environment variables on the host (never commit `.env`):
    `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (or
    `TWILIO_MESSAGING_SERVICE_SID`), and later the `STRIPE_*` keys
 4. Point your domain (or a subdomain) at the web process
+5. **Attach a persistent volume to the `data/` directory.** Without one, the
+   SQLite database (all your real subscribers!) gets wiped every time you
+   redeploy. On Railway: your service → **Settings → Volumes** → add a
+   volume mounted at `/app/data`. Do this before any real (non-test)
+   signups come in.
 
 ## Marking someone a client (free access)
 
@@ -94,6 +106,10 @@ happy to build that next.
 
 ## Content bank
 
-30 messages seeded from your LinkedIn posts, across 7 themes. Worth a skim
-before the first real send batch — flip `approved` to `0` in the `messages`
-table on any you'd rather hold back. Easy to add more over time as you post.
+52 messages: 30 from your LinkedIn posts, plus 22 distilled from
+*in-Rhythm: The Key to Purposeful Engagement*, across a mix of leadership,
+self-awareness, team, purpose, resilience, DEI, faith, and book-specific
+themes. Worth a skim before the first real send batch — flip `approved` to
+`0` in the `messages` table on any you'd rather hold back. New content
+added to `src/db/messageBank.js` is picked up automatically on the next
+deploy — nothing to duplicate.
