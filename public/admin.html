@@ -102,6 +102,8 @@
             <th>Status</th>
             <th>Access</th>
             <th>Signed up</th>
+            <th>Last sent</th>
+            <th>Next send</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -200,6 +202,18 @@ function fmtDate(s) {
   return d.toLocaleDateString();
 }
 
+// Includes the time (not just the date) - that's the whole point for
+// last_sent_at / next_send_at, since diagnosing "why didn't they get a
+// text" usually comes down to exactly when the scheduler last ran.
+function fmtDateTime(s) {
+  if (!s) return '—';
+  const d = new Date(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
+  if (isNaN(d)) return s;
+  return d.toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+}
+
 function optionsFor(name, current, choices) {
   return choices.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
 }
@@ -215,7 +229,7 @@ function renderRows() {
 
   const rowsEl = document.getElementById('rows');
   if (!filtered.length) {
-    rowsEl.innerHTML = `<tr><td colspan="9" class="muted">No subscribers match.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="11" class="muted">No subscribers match.</td></tr>`;
     return;
   }
 
@@ -247,6 +261,8 @@ function renderRows() {
       </td>
       <td><span class="muted">${escapeHtml(s.access_type || '—')}</span></td>
       <td class="muted">${fmtDate(s.created_at)}</td>
+      <td class="muted">${fmtDateTime(s.last_sent_at)}</td>
+      <td class="muted">${fmtDateTime(s.next_send_at)}</td>
     </tr>
   `).join('');
 
