@@ -42,12 +42,17 @@ app.listen(PORT, () => {
 // scheduler looking at an empty/different database than the one signups
 // actually land in. Sweeps once a day; each subscriber's own next_send_at
 // (based on their chosen cadence) determines who actually gets texted.
-const SCHEDULE = process.env.SCHEDULER_CRON || '0 9 * * *'; // default: 9am server time, daily
-console.log(`[scheduler] running in-process, sweep cron: "${SCHEDULE}"`);
+// Railway containers run in UTC by default, so "9am server time" without an
+// explicit timezone actually meant ~4am Central - not what anyone wants for
+// a daily text. SCHEDULER_TZ pins the cron to a real timezone (defaults to
+// Dr. Terry's, America/Chicago); SCHEDULER_CRON overrides the hour if needed.
+const SCHEDULE = process.env.SCHEDULER_CRON || '0 8 * * *'; // default: 8am in SCHEDULER_TZ, daily
+const SCHEDULE_TZ = process.env.SCHEDULER_TZ || 'America/Chicago';
+console.log(`[scheduler] running in-process, sweep cron: "${SCHEDULE}" (${SCHEDULE_TZ})`);
 cron.schedule(SCHEDULE, () => {
   console.log(`[scheduler] sweep starting at ${new Date().toISOString()}`);
   runOnce().catch(err => console.error('[scheduler] sweep error:', err));
-});
+}, { timezone: SCHEDULE_TZ });
 // Also sweep once shortly after boot, so a fresh deploy doesn't wait a full day
 setTimeout(() => {
   runOnce().catch(err => console.error('[scheduler] initial sweep error:', err));

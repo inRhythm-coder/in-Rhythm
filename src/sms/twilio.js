@@ -53,6 +53,28 @@ function buildOptInMessage() {
 }
 
 /**
+ * Sent once, right when Stripe confirms a paid subscriber's first payment
+ * (checkout.session.completed webhook) - separate from the opt-in text,
+ * which goes out immediately at signup before payment is even attempted.
+ * This is the "yes, your card went through and you're all set" message.
+ */
+function buildPurchaseConfirmationMessage(language) {
+  const contact = process.env.COACH_CELL
+    ? ` Questions? Text or call me at ${process.env.COACH_CELL}.`
+    : '';
+  if (language === 'es') {
+    return (
+      `¡Pago confirmado! Ya estás dentro de ${APP_NAME} con ${COACH_NAME}. ` +
+      `Tu primer mensaje de coaching llegará en el próximo envío programado.${contact} Responde STOP para cancelar.`
+    );
+  }
+  return (
+    `Payment confirmed! You're officially set up with ${APP_NAME} and ${COACH_NAME}. ` +
+    `Your first coaching text will arrive on the next scheduled send.${contact} Reply STOP anytime to cancel.`
+  );
+}
+
+/**
  * Fire-and-forget text to the coach's own cell when a new subscriber signs
  * up. Uses the same Twilio setup as everything else - no separate service
  * needed. Safe to call even if COACH_CELL isn't set (just no-ops).
@@ -71,4 +93,4 @@ async function notifyCoachOfNewSubscriber({ name, phone, cadence, email }) {
   }
 }
 
-module.exports = { sendSms, buildOptInMessage, notifyCoachOfNewSubscriber };
+module.exports = { sendSms, buildOptInMessage, buildPurchaseConfirmationMessage, notifyCoachOfNewSubscriber };

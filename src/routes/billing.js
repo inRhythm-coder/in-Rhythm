@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { createCheckoutSession, getStripe } = require('../billing/stripe');
+const { sendSms, buildPurchaseConfirmationMessage } = require('../sms/twilio');
 
 // Two separate routers because the webhook route needs the RAW request body
 // (to verify Stripe's signature) and must be mounted BEFORE express.json()
@@ -53,6 +54,15 @@ webhookRouter.post('/api/stripe-webhook', express.raw({ type: 'application/json'
           WHERE id = ?
         `).run(session.customer, session.subscription, subscriberId);
         console.log(`[webhook] subscriber ${subscriberId} billing activated`);
+
+        // Let the subscriber know their payment went through - the success
+        // page tells them a text is on its way, so make sure one actually
+        // is. Fire-and-forget: never let an SMS hiccup break the webhook.
+        const sub = db.prepare('SELECT phone, preferred_language FROM subscribers WHERE id = ?').get(subscriberId);
+        if (sub) {
+          sendSms(sub.phone, buildPurchaseConfirmationMessage(sub.preferred_language))
+            .catch(err => console.error('[webhook] purchase confirmation SMS failed:', err.message));
+        }
       }
       break;
     }
