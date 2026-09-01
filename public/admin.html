@@ -274,7 +274,7 @@ function renderRows() {
   rowsEl.innerHTML = filtered.map(s => `
     <tr data-id="${s.id}">
       <td>${escapeHtml(s.name)}</td>
-      <td>${escapeHtml(s.phone)}</td>
+      <td><input type="tel" data-field="phone" value="${escapeHtml(s.phone)}" style="width:130px;"></td>
       <td>${escapeHtml(s.email || '—')}</td>
       <td>
         <select data-field="cadence">
@@ -306,6 +306,10 @@ function renderRows() {
 
   rowsEl.querySelectorAll('select').forEach(sel => {
     sel.addEventListener('change', onFieldChange);
+  });
+  rowsEl.querySelectorAll('input[data-field="phone"]').forEach(inp => {
+    inp.addEventListener('change', onFieldChange);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
   });
 }
 

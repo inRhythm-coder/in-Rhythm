@@ -49,9 +49,18 @@ router.get('/api/admin/subscribers', requireAdmin, (req, res) => {
   res.json({ subscribers: rows });
 });
 
+// Same light US-centric normalization used at signup (src/routes/signup.js) -
+// kept in sync so a phone fixed here passes the same E.164 shape Twilio expects.
+function toE164(raw) {
+  const digits = String(raw).replace(/\D/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  return null;
+}
+
 router.patch('/api/admin/subscribers/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const { cadence, status, content_preference, preferred_language } = req.body;
+  const { cadence, status, content_preference, preferred_language, phone } = req.body;
 
   const existing = db.prepare('SELECT id FROM subscribers WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'subscriber not found' });
@@ -59,6 +68,13 @@ router.patch('/api/admin/subscribers/:id', requireAdmin, (req, res) => {
   const fields = [];
   const values = [];
 
+  if (phone !== undefined) {
+    const e164 = toE164(phone);
+    if (!e164) return res.status(400).json({ error: 'Enter a valid 10-digit US phone number' });
+    const dupe = db.prepare('SELECT id FROM subscribers WHERE phone = ? AND id != ?').get(e164, id);
+    if (dupe) return res.status(409).json({ error: 'Another subscriber already has that number' });
+    fields.push('phone = ?'); values.push(e164);
+  }
   if (cadence !== undefined) {
     if (!CADENCES.includes(cadence)) return res.status(400).json({ error: 'invalid cadence' });
     fields.push('cadence = ?'); values.push(cadence);
