@@ -102,6 +102,20 @@ router.patch('/api/admin/subscribers/:id', requireAdmin, (req, res) => {
   res.json({ ok: true, subscriber: updated });
 });
 
+// Permanently removes a subscriber record - for cleaning up accidental
+// duplicate signups (e.g. someone submitted the form twice). This deletes
+// their sends history too (foreign key), not just the subscriber row.
+router.delete('/api/admin/subscribers/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT id FROM subscribers WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'subscriber not found' });
+
+  db.prepare('DELETE FROM sends WHERE subscriber_id = ?').run(id);
+  db.prepare('DELETE FROM subscribers WHERE id = ?').run(id);
+
+  res.json({ ok: true });
+});
+
 // One-time catch-up: text everyone who signed up before the A2P fix and
 // never got a real welcome message (carrier-filtered), without touching
 // anyone who signed up normally afterward. Safe to call more than once -

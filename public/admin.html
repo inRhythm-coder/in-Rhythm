@@ -61,6 +61,11 @@
   .badge.paused { background: #eee; color: var(--muted); }
   .badge.unsubscribed { background: #fbeae8; color: var(--bad); }
   .save-flag { font-size: 11px; color: var(--accent-dark); margin-left: 6px; display: none; }
+  .danger-link {
+    background: none; border: none; color: var(--bad); font-size: 12px; font-weight: 600;
+    cursor: pointer; padding: 4px 6px; text-decoration: underline;
+  }
+  .danger-link:hover { color: #8a2e28; }
   #tableWrap { display: none; overflow-x: auto; }
   #loadErr { color: var(--bad); font-size: 13px; display: none; margin-bottom: 10px; }
 </style>
@@ -106,6 +111,7 @@
             <th>Signed up</th>
             <th>Last sent</th>
             <th>Next send</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -267,7 +273,7 @@ function renderRows() {
 
   const rowsEl = document.getElementById('rows');
   if (!filtered.length) {
-    rowsEl.innerHTML = `<tr><td colspan="11" class="muted">No subscribers match.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="12" class="muted">No subscribers match.</td></tr>`;
     return;
   }
 
@@ -301,6 +307,7 @@ function renderRows() {
       <td class="muted">${fmtDate(s.created_at)}</td>
       <td class="muted">${fmtDateTime(s.last_sent_at)}</td>
       <td class="muted">${fmtDateTime(s.next_send_at)}</td>
+      <td><button class="danger-link" data-action="delete">Delete</button></td>
     </tr>
   `).join('');
 
@@ -311,6 +318,33 @@ function renderRows() {
     inp.addEventListener('change', onFieldChange);
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
   });
+  rowsEl.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+    btn.addEventListener('click', onDeleteClick);
+  });
+}
+
+async function onDeleteClick(e) {
+  const row = e.target.closest('tr');
+  const id = row.getAttribute('data-id');
+  const sub = ALL_SUBSCRIBERS.find(s => String(s.id) === String(id));
+  const label = sub ? `${sub.name} (${sub.phone})` : 'this subscriber';
+
+  if (!confirm(`Permanently delete ${label}? This can't be undone - use it for accidental duplicate signups, not to unsubscribe someone (use the Status dropdown for that).`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/admin/subscribers/${id}`, { method: 'DELETE', headers: headers() });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Delete failed');
+    }
+    ALL_SUBSCRIBERS = ALL_SUBSCRIBERS.filter(s => String(s.id) !== String(id));
+    renderRows();
+    loadSummary();
+  } catch (err) {
+    alert(err.message);
+  }
 }
 
 function escapeHtml(str) {
