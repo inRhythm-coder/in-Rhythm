@@ -83,11 +83,13 @@
     <div class="toolbar">
       <input type="search" id="search" placeholder="Search name, phone, or email...">
       <div class="right">
+        <button class="secondary" id="catchupBtn">Send catch-up welcome</button>
         <button class="secondary" id="refreshBtn">Refresh</button>
         <button class="secondary" id="lockBtn">Lock</button>
       </div>
     </div>
 
+    <div id="catchupMsg" class="muted" style="margin-bottom:10px; display:none;"></div>
     <div id="loadErr"></div>
     <div id="tableWrap">
       <table>
@@ -161,6 +163,42 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
   loadSummary();
   loadSubscribers();
 });
+document.getElementById('catchupBtn').addEventListener('click', runCatchupWelcome);
+
+async function runCatchupWelcome() {
+  const msgEl = document.getElementById('catchupMsg');
+  const confirmed = confirm(
+    "This sends a one-time catch-up welcome text to every active subscriber who signed up before the delivery fix and " +
+    "never actually received their welcome message. It's safe to click even if you've clicked it before - anyone who's " +
+    "already gotten this catch-up text (or signed up after the fix) won't be texted again.\n\nSend it now?"
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById('catchupBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  msgEl.style.display = 'block';
+  msgEl.textContent = 'Sending catch-up welcome texts...';
+
+  try {
+    const res = await fetch('/api/admin/catchup-welcome', { method: 'POST', headers: headers() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to send catch-up messages');
+
+    if (data.attempted === 0) {
+      msgEl.textContent = 'No one needed a catch-up text - everyone eligible has already received one.';
+    } else {
+      msgEl.textContent = `Done: ${data.sent} of ${data.attempted} catch-up texts sent successfully` +
+        (data.failed ? `, ${data.failed} failed (check Twilio logs for those numbers).` : '.');
+    }
+    await loadSubscribers();
+  } catch (err) {
+    msgEl.textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send catch-up welcome';
+  }
+}
 document.getElementById('search').addEventListener('input', renderRows);
 
 async function loadSummary() {

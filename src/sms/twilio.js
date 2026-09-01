@@ -75,6 +75,31 @@ function buildPurchaseConfirmationMessage(language) {
 }
 
 /**
+ * One-time "catch-up" welcome, for subscribers who signed up before the
+ * A2P 10DLC carrier registration was fixed and whose original welcome text
+ * was silently filtered by carriers (they never actually received it,
+ * even though our system had recorded the signup as successful). Distinct
+ * wording from buildOptInMessage() so it doesn't read like a duplicate or
+ * a new signup - it explains why they're getting a "welcome" days/weeks in.
+ */
+function buildCatchupWelcomeMessage(language) {
+  const contact = process.env.COACH_CELL
+    ? ` Questions? Text or call me at ${process.env.COACH_CELL}.`
+    : '';
+  if (language === 'es') {
+    return (
+      `Hola, soy ${COACH_NAME} de ${APP_NAME}. Tuvimos un problema técnico que impidió la entrega de mensajes de texto ` +
+      `y ya está resuelto - ¡bienvenido(a) de nuevo a ${APP_NAME}! Tus mensajes de coaching llegarán ahora en tu horario ` +
+      `regular.${contact} Responde STOP para cancelar en cualquier momento.`
+    );
+  }
+  return (
+    `Hi, this is ${COACH_NAME} with ${APP_NAME}. We had a technical delivery issue that's now fixed - welcome (again) ` +
+    `to ${APP_NAME}! Your coaching texts will now arrive on your regular schedule.${contact} Reply STOP anytime to cancel.`
+  );
+}
+
+/**
  * Fire-and-forget text to the coach's own cell when a new subscriber signs
  * up. Uses the same Twilio setup as everything else - no separate service
  * needed. Safe to call even if COACH_CELL isn't set (just no-ops).
@@ -93,4 +118,10 @@ async function notifyCoachOfNewSubscriber({ name, phone, cadence, email }) {
   }
 }
 
-module.exports = { sendSms, buildOptInMessage, buildPurchaseConfirmationMessage, notifyCoachOfNewSubscriber };
+module.exports = {
+  sendSms,
+  buildOptInMessage,
+  buildPurchaseConfirmationMessage,
+  buildCatchupWelcomeMessage,
+  notifyCoachOfNewSubscriber,
+};

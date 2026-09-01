@@ -1,7 +1,15 @@
 const express = require('express');
 const db = require('../db');
+const { sendSms, buildCatchupWelcomeMessage } = require('../sms/twilio');
 
 const router = express.Router();
+
+// Anyone who signed up before this fix went live may have had their welcome
+// text silently filtered by carriers (A2P 10DLC wasn't registered/attached
+// yet). This cutoff keeps the one-time catch-up send from ever re-firing on
+// someone who signed up normally afterward and already got a real welcome
+// text - safe to click the catch-up button more than once.
+const WELCOME_CATCHUP_CUTOFF = '2026-09-01T12:00:00Z';
 
 const CADENCES = ['daily', 'weekly', 'biweekly', 'monthly'];
 const STATUSES = ['pending_confirmation', 'active', 'paused', 'unsubscribed'];
@@ -76,6 +84,36 @@ router.patch('/api/admin/subscribers/:id', requireAdmin, (req, res) => {
 
   const updated = db.prepare('SELECT * FROM subscribers WHERE id = ?').get(id);
   res.json({ ok: true, subscriber: updated });
+});
+
+// One-time catch-up: text everyone who signed up before the A2P fix and
+// never got a real welcome message (carrier-filtered), without touching
+// anyone who signed up normally afterward. Safe to call more than once -
+// each subscriber only ever gets this once (welcome_catchup_sent_at).
+router.post('/api/admin/catchup-welcome', requireAdmin, async (req, res) => {
+  const candidates = db.prepare(`
+    SELECT id, name, phone, preferred_language
+    FROM subscribers
+    WHERE status = 'active'
+      AND welcome_catchup_sent_at IS NULL
+      AND created_at < ?
+  `).all(WELCOME_CATCHUP_CUTOFF);
+
+  const results = { attempted: candidates.length, sent: 0, failed: 0, errors: [] };
+
+  for (const sub of candidates) {
+    const body = buildCatchupWelcomeMessage(sub.preferred_language);
+    try {
+      await sendSms(sub.phone, body);
+      db.prepare('UPDATE subscribers SET welcome_catchup_sent_at = CURRENT_TIMESTAMP WHERE id = ?').run(sub.id);
+      results.sent += 1;
+    } catch (err) {
+      results.failed += 1;
+      results.errors.push({ id: sub.id, name: sub.name, error: String(err.message || err) });
+    }
+  }
+
+  res.json(results);
 });
 
 module.exports = router;

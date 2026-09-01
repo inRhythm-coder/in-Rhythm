@@ -29,6 +29,7 @@ function addColumnIfMissing(table, column, definition) {
 addColumnIfMissing('subscribers', 'email', 'TEXT');
 addColumnIfMissing('subscribers', 'preferred_language', "TEXT NOT NULL DEFAULT 'en'");
 addColumnIfMissing('subscribers', 'content_preference', "TEXT NOT NULL DEFAULT 'both'");
+addColumnIfMissing('subscribers', 'welcome_catchup_sent_at', 'DATETIME');
 addColumnIfMissing('messages', 'language', "TEXT NOT NULL DEFAULT 'en'");
 addColumnIfMissing('messages', 'category', "TEXT NOT NULL DEFAULT 'leadership'");
 
