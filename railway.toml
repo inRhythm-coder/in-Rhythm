@@ -1,0 +1,12 @@
+[deploy]
+# Without this, Railway's default restart policy only retries a crashing
+# process a handful of times before giving up and leaving the deployment
+# "Active" but actually dead - no more log output, no more sweeps, nothing -
+# which is what made an earlier crash-loop invisible for hours. Restarting
+# on any non-zero exit, with a much higher retry ceiling, means a transient
+# crash recovers on its own instead of silently taking the whole app down
+# until someone happens to notice.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 50
+healthcheckPath = "/healthz"
+healthcheckTimeout = 30
