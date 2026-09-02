@@ -33,4 +33,38 @@ addColumnIfMissing('subscribers', 'welcome_catchup_sent_at', 'DATETIME');
 addColumnIfMissing('messages', 'language', "TEXT NOT NULL DEFAULT 'en'");
 addColumnIfMissing('messages', 'category', "TEXT NOT NULL DEFAULT 'leadership'");
 
+// One-time-per-boot cleanup: the daily scheduler sweep (src/server.js) only
+// fires ONCE a day, at a fixed hour. If a subscriber's next_send_at ever
+// carries a different time-of-day (e.g. 9:05am when the sweep runs at
+// 8:00am - which happened whenever the "sweep shortly after boot" fired at
+// an odd time during a deploy, or from an early version of this code that
+// didn't anchor the time at all), that day's sweep sees "not due yet" and
+// skips them until the FOLLOWING day's sweep - a full ~24 hours late, every
+// cycle, indefinitely. This re-anchors every existing next_send_at to the
+// scheduler's actual hour/minute (same calendar date, just the correct
+// clock time), so it lines up with the sweep from here on. Safe to run on
+// every boot - it's a no-op once everything is already aligned.
+function normalizeNextSendTimes() {
+  const { SCHEDULE_TZ, SEND_HOUR, SEND_MINUTE } = require('../scheduler/scheduleConfig');
+  const { zonedParts, zonedTimeToUtc } = require('../scheduler/tz');
+
+  const rows = db.prepare(`SELECT id, next_send_at FROM subscribers WHERE next_send_at IS NOT NULL`).all();
+  const update = db.prepare(`UPDATE subscribers SET next_send_at = ? WHERE id = ?`);
+  let fixed = 0;
+  for (const row of rows) {
+    const raw = row.next_send_at.includes('T') ? row.next_send_at : row.next_send_at.replace(' ', 'T') + 'Z';
+    const current = new Date(raw);
+    if (isNaN(current.getTime())) continue;
+
+    const parts = zonedParts(current, SCHEDULE_TZ);
+    if (parts.hour === SEND_HOUR && parts.minute === SEND_MINUTE) continue; // already anchored
+
+    const corrected = zonedTimeToUtc(parts.year, parts.month, parts.day, SEND_HOUR, SEND_MINUTE, SCHEDULE_TZ).toISOString();
+    update.run(corrected, row.id);
+    fixed++;
+  }
+  if (fixed) console.log(`[migrate] re-anchored next_send_at time-of-day for ${fixed} subscriber(s)`);
+}
+normalizeNextSendTimes();
+
 module.exports = db;

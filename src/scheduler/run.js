@@ -2,14 +2,38 @@ require('dotenv').config();
 const db = require('../db');
 const { isSendEligible, expireStaleTailAccess } = require('../db/access');
 const { sendSms } = require('../sms/twilio');
+const { SCHEDULE_TZ, SEND_HOUR, SEND_MINUTE } = require('./scheduleConfig');
+const { zonedParts, zonedTimeToUtc } = require('./tz');
 
 const CADENCE_DAYS = { daily: 1, weekly: 7, biweekly: 14, monthly: 30 };
 
+/**
+ * Always lands on the exact hour/minute the daily sweep actually fires at
+ * (SEND_HOUR:SEND_MINUTE in SCHEDULE_TZ), `days` calendar days out - never
+ * inherits whatever time-of-day the triggering event happened to occur at
+ * (a signup at 9:05am, or an extra sweep 10 seconds after a deploy).
+ *
+ * That matters because the sweep in server.js only fires ONCE a day, at a
+ * fixed hour. If next_send_at ever drifts to some other time (e.g. 9:05am
+ * when the schedule is 8:00am), that day's 8:00am sweep sees "not due yet"
+ * and skips them - they don't get picked up until the FOLLOWING day's
+ * 8:00am sweep, roughly 24 hours late, and it keeps happening every cycle
+ * after that since each send re-derives the next one from itself. Anchoring
+ * to the actual sweep time here is what keeps that from ever happening.
+ */
 function computeNextSendAt(cadence, from = new Date()) {
   const days = CADENCE_DAYS[cadence];
-  const next = new Date(from);
-  next.setDate(next.getDate() + days);
-  return next.toISOString();
+  const nowParts = zonedParts(from, SCHEDULE_TZ);
+  const targetDateUtc = new Date(Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day));
+  targetDateUtc.setUTCDate(targetDateUtc.getUTCDate() + days);
+  return zonedTimeToUtc(
+    targetDateUtc.getUTCFullYear(),
+    targetDateUtc.getUTCMonth() + 1,
+    targetDateUtc.getUTCDate(),
+    SEND_HOUR,
+    SEND_MINUTE,
+    SCHEDULE_TZ
+  ).toISOString();
 }
 
 /**

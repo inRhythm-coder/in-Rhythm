@@ -46,8 +46,7 @@ app.listen(PORT, () => {
 // explicit timezone actually meant ~4am Central - not what anyone wants for
 // a daily text. SCHEDULER_TZ pins the cron to a real timezone (defaults to
 // Dr. Terry's, America/Chicago); SCHEDULER_CRON overrides the hour if needed.
-const SCHEDULE = process.env.SCHEDULER_CRON || '0 8 * * *'; // default: 8am in SCHEDULER_TZ, daily
-const SCHEDULE_TZ = process.env.SCHEDULER_TZ || 'America/Chicago';
+const { SCHEDULE, SCHEDULE_TZ } = require('./scheduler/scheduleConfig');
 console.log(`[scheduler] running in-process, sweep cron: "${SCHEDULE}" (${SCHEDULE_TZ})`);
 cron.schedule(SCHEDULE, () => {
   console.log(`[scheduler] sweep starting at ${new Date().toISOString()}`);
