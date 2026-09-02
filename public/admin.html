@@ -89,6 +89,7 @@
       <input type="search" id="search" placeholder="Search name, phone, or email...">
       <div class="right">
         <button class="secondary" id="catchupBtn">Send catch-up welcome</button>
+        <button class="secondary" id="runSchedulerBtn">Run scheduler now</button>
         <button class="secondary" id="refreshBtn">Refresh</button>
         <button class="secondary" id="lockBtn">Lock</button>
       </div>
@@ -213,6 +214,43 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
   loadClientCodes();
 });
 document.getElementById('catchupBtn').addEventListener('click', runCatchupWelcome);
+document.getElementById('runSchedulerBtn').addEventListener('click', runSchedulerNow);
+
+async function runSchedulerNow() {
+  const msgEl = document.getElementById('catchupMsg');
+  const confirmed = confirm(
+    "This immediately runs the same daily send sweep the 8am scheduler runs - anyone currently due a message gets " +
+    "texted right now, for real. Use this to test that sending works without waiting for the next scheduled run.\n\nRun it now?"
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById('runSchedulerBtn');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  msgEl.style.display = 'block';
+  msgEl.textContent = 'Running scheduler sweep...';
+
+  try {
+    const res = await fetch('/api/admin/run-scheduler-now', { method: 'POST', headers: headers() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Scheduler run failed');
+
+    if (data.sendsAttempted === 0) {
+      msgEl.textContent = 'Sweep ran with no errors - no one was due a message right now.';
+    } else {
+      const sent = data.sends.filter(s => s.status === 'sent').length;
+      const failed = data.sends.filter(s => s.status === 'failed').length;
+      msgEl.textContent = `Sweep ran: ${sent} sent, ${failed} failed` +
+        (failed ? ' - check the sends for error details.' : '.');
+    }
+    await loadSubscribers();
+  } catch (err) {
+    msgEl.textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run scheduler now';
+  }
+}
 
 async function runCatchupWelcome() {
   const msgEl = document.getElementById('catchupMsg');
