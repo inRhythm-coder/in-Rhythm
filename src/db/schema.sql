@@ -66,6 +66,24 @@ CREATE TABLE IF NOT EXISTS sends (
   sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Individual, trackable client access codes (as opposed to the single
+-- shared CLIENT_ACCESS_CODE env var, which anyone can pass along to anyone
+-- else). Each row is one code, generated from the admin dashboard for one
+-- named client, good for max_uses signups (1 by default) before it stops
+-- working. The legacy shared code in .env keeps working too, for anything
+-- already printed/sent out referencing it.
+CREATE TABLE IF NOT EXISTS client_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  note TEXT,                            -- e.g. the client's name, for Terry's reference
+  max_uses INTEGER NOT NULL DEFAULT 1,
+  uses_count INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,    -- manually revoked codes are set to 0
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  used_at DATETIME,
+  used_by_subscriber_id INTEGER REFERENCES subscribers(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sends_subscriber ON sends(subscriber_id);
 CREATE INDEX IF NOT EXISTS idx_subscribers_next_send ON subscribers(next_send_at);
 CREATE INDEX IF NOT EXISTS idx_subscribers_status ON subscribers(status);

@@ -102,6 +102,61 @@ router.patch('/api/admin/subscribers/:id', requireAdmin, (req, res) => {
   res.json({ ok: true, subscriber: updated });
 });
 
+// --- Client access codes -----------------------------------------------
+// Individually-issued, trackable codes (as opposed to the single shared
+// CLIENT_ACCESS_CODE, which anyone can pass along to anyone else). Each
+// one is good for a limited number of signups - 1 by default - before it
+// stops working.
+
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I - easy to read aloud/type
+function generateCode(length = 8) {
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+router.get('/api/admin/client-codes', requireAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT cc.*, s.name AS used_by_name, s.phone AS used_by_phone
+    FROM client_codes cc
+    LEFT JOIN subscribers s ON s.id = cc.used_by_subscriber_id
+    ORDER BY cc.created_at DESC
+  `).all();
+  res.json({ codes: rows });
+});
+
+router.post('/api/admin/client-codes', requireAdmin, (req, res) => {
+  const { note, maxUses } = req.body;
+  const uses = Number.isInteger(maxUses) && maxUses > 0 ? maxUses : 1;
+
+  // Extremely unlikely to collide, but guard against it anyway.
+  let code;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = generateCode();
+    const exists = db.prepare('SELECT 1 FROM client_codes WHERE code = ?').get(candidate);
+    if (!exists) { code = candidate; break; }
+  }
+  if (!code) return res.status(500).json({ error: 'Could not generate a unique code, try again' });
+
+  const result = db.prepare(`
+    INSERT INTO client_codes (code, note, max_uses) VALUES (?, ?, ?)
+  `).run(code, (note || '').trim() || null, uses);
+
+  const created = db.prepare('SELECT * FROM client_codes WHERE id = ?').get(result.lastInsertRowid);
+  res.json({ ok: true, code: created });
+});
+
+// Revoke a code so it stops working immediately, even if unused / partially used.
+router.post('/api/admin/client-codes/:id/revoke', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT id FROM client_codes WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'code not found' });
+  db.prepare('UPDATE client_codes SET active = 0 WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
 // Permanently removes a subscriber record - for cleaning up accidental
 // duplicate signups (e.g. someone submitted the form twice). This deletes
 // their sends history too (foreign key), not just the subscriber row.

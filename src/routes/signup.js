@@ -44,9 +44,24 @@ router.post('/api/signup', async (req, res) => {
       return res.status(409).json({ error: 'This number is already signed up.' });
     }
 
-    // Client access code: simplest possible version. Swap for a real
-    // per-client code / lookup against your CRM roster when ready.
-    const isClientCode = clientCode && clientCode.trim().toUpperCase() === (process.env.CLIENT_ACCESS_CODE || 'CLIENT2026');
+    // Client access code: check individually-issued codes first (generated
+    // from the admin dashboard, one per client, good for a limited number
+    // of uses - default 1), then fall back to the single shared code in
+    // .env for backward compatibility with anything already handed out
+    // referencing it.
+    let matchedCode = null;
+    let isClientCode = false;
+    if (clientCode && clientCode.trim()) {
+      const codeInput = clientCode.trim().toUpperCase();
+      matchedCode = db.prepare(`
+        SELECT * FROM client_codes WHERE code = ? AND active = 1 AND uses_count < max_uses
+      `).get(codeInput);
+      if (matchedCode) {
+        isClientCode = true;
+      } else if (codeInput === (process.env.CLIENT_ACCESS_CODE || 'CLIENT2026')) {
+        isClientCode = true;
+      }
+    }
     const accessType = isClientCode ? 'client' : 'paid';
 
     const result = db.prepare(`
@@ -56,6 +71,13 @@ router.post('/api/signup', async (req, res) => {
 
     if (isClientCode) {
       markAsClient(result.lastInsertRowid, { engagementStart: new Date().toISOString().slice(0, 10) });
+    }
+    if (matchedCode) {
+      db.prepare(`
+        UPDATE client_codes
+        SET uses_count = uses_count + 1, used_at = CURRENT_TIMESTAMP, used_by_subscriber_id = ?
+        WHERE id = ?
+      `).run(result.lastInsertRowid, matchedCode.id);
     }
 
     // Send opt-in confirmation text immediately (also verifies the number works)

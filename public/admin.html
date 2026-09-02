@@ -117,6 +117,47 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
+
+    <h2 style="font-size:18px; margin:36px 0 4px;">Client access codes</h2>
+    <p class="lead" style="margin-bottom:14px;">
+      Generate a one-time (or limited-use) code for a specific client, instead of sharing your one
+      general code with everyone. Each code stops working once it's been used the set number of times.
+    </p>
+
+    <div class="gate" style="max-width:520px; padding:18px 20px; margin-bottom:20px;">
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
+        <div style="flex:2; min-width:160px;">
+          <label for="codeNote" style="margin-bottom:6px;">Client name / note</label>
+          <input id="codeNote" placeholder="e.g. Jane Smith">
+        </div>
+        <div style="flex:1; min-width:90px;">
+          <label for="codeMaxUses" style="margin-bottom:6px;">Uses allowed</label>
+          <input id="codeMaxUses" type="number" min="1" value="1">
+        </div>
+        <div>
+          <button id="genCodeBtn" style="margin-top:0;">Generate code</button>
+        </div>
+      </div>
+      <div id="genCodeResult" class="muted" style="margin-top:12px; display:none;"></div>
+    </div>
+
+    <div id="codesLoadErr" class="muted" style="display:none;"></div>
+    <div id="codesWrap" style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Note</th>
+            <th>Uses</th>
+            <th>Status</th>
+            <th>Last used by</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="codeRows"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -148,6 +189,7 @@ async function tryUnlock(token) {
   dash.style.display = 'block';
   await loadSummary();
   await loadSubscribers();
+  await loadClientCodes();
   return true;
 }
 
@@ -168,6 +210,7 @@ document.getElementById('lockBtn').addEventListener('click', () => {
 document.getElementById('refreshBtn').addEventListener('click', () => {
   loadSummary();
   loadSubscribers();
+  loadClientCodes();
 });
 document.getElementById('catchupBtn').addEventListener('click', runCatchupWelcome);
 
@@ -373,6 +416,108 @@ async function onFieldChange(e) {
     const sub = ALL_SUBSCRIBERS.find(s => String(s.id) === String(id));
     if (sub) sub[field] = value;
     loadSummary();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// --- Client access codes -------------------------------------------------
+
+let ALL_CODES = [];
+
+async function loadClientCodes() {
+  const errEl = document.getElementById('codesLoadErr');
+  errEl.style.display = 'none';
+  try {
+    const res = await fetch('/api/admin/client-codes', { headers: headers() });
+    if (!res.ok) throw new Error('Failed to load client codes');
+    const data = await res.json();
+    ALL_CODES = data.codes || [];
+    renderCodeRows();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+function renderCodeRows() {
+  const rowsEl = document.getElementById('codeRows');
+  if (!ALL_CODES.length) {
+    rowsEl.innerHTML = `<tr><td colspan="7" class="muted">No codes generated yet.</td></tr>`;
+    return;
+  }
+
+  rowsEl.innerHTML = ALL_CODES.map(c => {
+    const usedUp = c.uses_count >= c.max_uses;
+    let statusHtml;
+    if (!c.active) statusHtml = `<span class="badge unsubscribed">Revoked</span>`;
+    else if (usedUp) statusHtml = `<span class="badge paused">Used up</span>`;
+    else statusHtml = `<span class="badge active">Active</span>`;
+
+    const lastUsed = c.used_by_name ? `${escapeHtml(c.used_by_name)} (${escapeHtml(c.used_by_phone || '')})` : '—';
+
+    return `
+      <tr>
+        <td style="font-family:monospace; font-weight:700;">${escapeHtml(c.code)}</td>
+        <td>${escapeHtml(c.note || '—')}</td>
+        <td>${c.uses_count} / ${c.max_uses}</td>
+        <td>${statusHtml}</td>
+        <td class="muted">${lastUsed}</td>
+        <td class="muted">${fmtDate(c.created_at)}</td>
+        <td>${c.active ? `<button class="danger-link" data-revoke-id="${c.id}">Revoke</button>` : ''}</td>
+      </tr>
+    `;
+  }).join('');
+
+  rowsEl.querySelectorAll('button[data-revoke-id]').forEach(btn => {
+    btn.addEventListener('click', onRevokeCode);
+  });
+}
+
+document.getElementById('genCodeBtn').addEventListener('click', async () => {
+  const noteInput = document.getElementById('codeNote');
+  const maxUsesInput = document.getElementById('codeMaxUses');
+  const resultEl = document.getElementById('genCodeResult');
+  const btn = document.getElementById('genCodeBtn');
+
+  const maxUses = parseInt(maxUsesInput.value, 10) || 1;
+
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/client-codes', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ note: noteInput.value, maxUses }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to generate code');
+
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `Generated: <strong style="font-family:monospace; font-size:15px;">${escapeHtml(data.code.code)}</strong> — share this with the client. It'll work ${maxUses === 1 ? 'once' : `up to ${maxUses} times`}.`;
+    noteInput.value = '';
+    maxUsesInput.value = '1';
+    await loadClientCodes();
+  } catch (err) {
+    resultEl.style.display = 'block';
+    resultEl.textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function onRevokeCode(e) {
+  const id = e.target.getAttribute('data-revoke-id');
+  const c = ALL_CODES.find(x => String(x.id) === String(id));
+  const label = c ? `${c.code}${c.note ? ` (${c.note})` : ''}` : 'this code';
+  if (!confirm(`Revoke ${label}? It will stop working immediately.`)) return;
+
+  try {
+    const res = await fetch(`/api/admin/client-codes/${id}/revoke`, { method: 'POST', headers: headers() });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to revoke code');
+    }
+    await loadClientCodes();
   } catch (err) {
     alert(err.message);
   }
