@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { sendSms, buildCatchupWelcomeMessage } = require('../sms/twilio');
+const { runOnce } = require('../scheduler/run');
 
 const router = express.Router();
 
@@ -199,6 +200,26 @@ router.post('/api/admin/catchup-welcome', requireAdmin, async (req, res) => {
   }
 
   res.json(results);
+});
+
+// Manually fire the same sweep the daily cron runs, on demand - lets us
+// confirm a fix actually sends (and see the real error if it doesn't)
+// without waiting for the next scheduled 8am run.
+router.post('/api/admin/run-scheduler-now', requireAdmin, async (req, res) => {
+  const before = db.prepare(`SELECT COUNT(*) AS n FROM sends`).get().n;
+  try {
+    await runOnce();
+    const after = db.prepare(`SELECT COUNT(*) AS n FROM sends`).get().n;
+    const newSends = db.prepare(`
+      SELECT sends.id, sends.status, sends.error, sends.sent_at,
+             subscribers.name, subscribers.phone
+      FROM sends JOIN subscribers ON subscribers.id = sends.subscriber_id
+      ORDER BY sends.id DESC LIMIT ?
+    `).all(after - before);
+    res.json({ ok: true, sendsAttempted: after - before, sends: newSends });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err && err.stack ? err.stack : err) });
+  }
 });
 
 module.exports = router;
