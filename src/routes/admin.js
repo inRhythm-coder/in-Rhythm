@@ -16,6 +16,7 @@ const CADENCES = ['daily', 'weekly', 'biweekly', 'monthly'];
 const STATUSES = ['pending_confirmation', 'active', 'paused', 'unsubscribed'];
 const CONTENT_PREFS = ['leadership', 'spiritual', 'both'];
 const LANGUAGES = ['en', 'es'];
+const ACCESS_TYPES = ['client', 'client_tail', 'comp', 'paid'];
 
 function requireAdmin(req, res, next) {
   const token = req.header('x-admin-token') || req.query.token;
@@ -61,7 +62,7 @@ function toE164(raw) {
 
 router.patch('/api/admin/subscribers/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const { cadence, status, content_preference, preferred_language, phone } = req.body;
+  const { cadence, status, content_preference, preferred_language, phone, access_type } = req.body;
 
   const existing = db.prepare('SELECT id FROM subscribers WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'subscriber not found' });
@@ -87,6 +88,16 @@ router.patch('/api/admin/subscribers/:id', requireAdmin, (req, res) => {
   if (content_preference !== undefined) {
     if (!CONTENT_PREFS.includes(content_preference)) return res.status(400).json({ error: 'invalid content_preference' });
     fields.push('content_preference = ?'); values.push(content_preference);
+  }
+  if (access_type !== undefined) {
+    // Fixes the case where someone was meant to be free (a client-code
+    // signup) but the code didn't match at signup time and they silently
+    // fell through to 'paid' - which then never receives a text at all
+    // unless a real Stripe subscription goes active. Setting this directly
+    // to 'client' or 'comp' makes them send-eligible immediately, no Stripe
+    // involvement needed.
+    if (!ACCESS_TYPES.includes(access_type)) return res.status(400).json({ error: 'invalid access_type' });
+    fields.push('access_type = ?'); values.push(access_type);
   }
   if (preferred_language !== undefined) {
     if (!LANGUAGES.includes(preferred_language)) return res.status(400).json({ error: 'invalid preferred_language' });
