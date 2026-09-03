@@ -1,12 +1,40 @@
 require('dotenv').config();
 
+// Masks a secret for logging: shows just enough to visually confirm it's
+// the right value (and to spot stray whitespace/quotes/newlines from a
+// copy-paste into Railway) without ever printing the whole thing.
+function maskForLog(value) {
+  if (!value) return '(empty)';
+  const len = value.length;
+  const hasWhitespace = /\s/.test(value);
+  const hasQuotes = /^['"]|['"]$/.test(value);
+  const first = value.slice(0, 4);
+  const last = value.slice(-4);
+  const flags = [];
+  if (hasWhitespace) flags.push('CONTAINS WHITESPACE');
+  if (hasQuotes) flags.push('HAS SURROUNDING QUOTES');
+  return `${first}...${last} (len=${len}${flags.length ? ', ' + flags.join(', ') : ''})`;
+}
+
 let client = null;
+let loggedCredsOnce = false;
 function getClient() {
   if (client) return client;
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
+  // Trim defensively - a Railway variable pasted with a trailing space or
+  // newline (very easy to do when copying from a browser) produces a SID/
+  // token that "looks" right in the UI but fails Twilio auth silently.
+  const sid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
+  const token = (process.env.TWILIO_AUTH_TOKEN || '').trim();
   if (!sid || !token) {
     throw new Error('Twilio credentials missing. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env');
+  }
+  if (!loggedCredsOnce) {
+    loggedCredsOnce = true;
+    console.log(`[twilio] using Account SID: ${maskForLog(sid)}`);
+    console.log(`[twilio] using Auth Token: ${maskForLog(token)}`);
+    if (!sid.startsWith('AC')) {
+      console.log('[twilio] WARNING: TWILIO_ACCOUNT_SID does not start with "AC" - this is not a valid Account SID.');
+    }
   }
   const twilio = require('twilio');
   client = twilio(sid, token);
