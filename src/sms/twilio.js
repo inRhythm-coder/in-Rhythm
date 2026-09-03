@@ -18,6 +18,25 @@ function getClient() {
  * handles carrier registration/throughput), otherwise falls back to a
  * single From number.
  */
+// Without an explicit timeout, a hung connection to Twilio (bad network
+// egress, a stalled TLS handshake, anything short of Twilio itself
+// returning an HTTP error) leaves this await pending forever. That's
+// exactly what happened on 2026-09-03: the 8am sweep found subscribers
+// due, started sending to the first one, and the whole sweep froze for
+// good - no [sent], no [failed], no crash, nothing - because nothing ever
+// told the request to give up. This wraps the Twilio call in a race
+// against a timeout so a stuck connection fails loudly (and quickly)
+// instead of silently blocking every subscriber behind it forever.
+const SEND_TIMEOUT_MS = 20000;
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function sendSms(toPhoneE164, body) {
   const c = getClient();
   const params = { to: toPhoneE164, body };
@@ -30,7 +49,7 @@ async function sendSms(toPhoneE164, body) {
     throw new Error('Set either TWILIO_MESSAGING_SERVICE_SID or TWILIO_FROM_NUMBER in .env');
   }
 
-  const message = await c.messages.create(params);
+  const message = await withTimeout(c.messages.create(params), SEND_TIMEOUT_MS, 'Twilio send');
   return message; // has .sid, .status, etc.
 }
 
