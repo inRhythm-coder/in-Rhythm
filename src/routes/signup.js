@@ -58,7 +58,13 @@ router.post('/api/signup', async (req, res) => {
       `).get(codeInput);
       if (matchedCode) {
         isClientCode = true;
-      } else if (codeInput === (process.env.CLIENT_ACCESS_CODE || 'CLIENT2026')) {
+      } else if (codeInput === (process.env.CLIENT_ACCESS_CODE || 'CLIENT2026').trim().toUpperCase()) {
+        // codeInput is always upper-cased above, but the env var wasn't -
+        // so anyone typing the shared code in a different case than however
+        // it happened to be set in Railway (or with stray whitespace) was
+        // silently falling through to 'paid' access with no error shown
+        // anywhere. This is very likely why 3 client-code signups ended up
+        // needing a Stripe subscription they were never supposed to need.
         isClientCode = true;
       }
     }
