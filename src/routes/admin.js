@@ -227,6 +227,86 @@ router.post('/api/admin/subscribers/:id/make-due-now', requireAdmin, (req, res) 
   res.json({ ok: true });
 });
 
+// One-off diagnostic: talks to Twilio's REST API directly from the live
+// Railway server (which we know CAN reach Twilio - it's the same place
+// getting the real 404s) and reports exactly which call fails and how.
+// Checks, in order: (1) does the account itself resolve, (2) does the
+// configured Messaging Service SID (or From number) resolve. This tells
+// us whether the 404 is happening at the account level (credentials/
+// account itself) or specifically around the messaging setup - something
+// a masked SID/token comparison can't reveal. Safe to leave in; it never
+// sends a real message and only reveals already-non-secret identifiers
+// (never the auth token itself).
+router.get('/api/admin/twilio-diagnostic', requireAdmin, async (req, res) => {
+  const sid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
+  const token = (process.env.TWILIO_AUTH_TOKEN || '').trim();
+  const result = { accountSidUsed: sid ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : null };
+
+  if (!sid || !token) {
+    result.error = 'TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set in this environment';
+    return res.json(result);
+  }
+
+  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+
+  async function twilioGet(path) {
+    const r = await fetch(`https://api.twilio.com${path}`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    let body;
+    try { body = await r.json(); } catch { body = await r.text(); }
+    return { status: r.status, body };
+  }
+
+  try {
+    const accountCheck = await twilioGet(`/2010-04-01/Accounts/${sid}.json`);
+    result.accountCheck = {
+      status: accountCheck.status,
+      friendlyName: accountCheck.body && accountCheck.body.friendly_name,
+      accountStatus: accountCheck.body && accountCheck.body.status,
+      type: accountCheck.body && accountCheck.body.type,
+      errorMessage: accountCheck.body && accountCheck.body.message,
+    };
+  } catch (err) {
+    result.accountCheck = { error: String(err.message || err) };
+  }
+
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
+  const fromNumber = process.env.TWILIO_FROM_NUMBER;
+  result.messagingConfig = {
+    usingMessagingServiceSid: messagingServiceSid || null,
+    usingFromNumber: fromNumber || null,
+  };
+
+  if (messagingServiceSid) {
+    try {
+      const svcCheck = await twilioGet(`/v1/Services/${messagingServiceSid}`);
+      result.messagingServiceCheck = {
+        status: svcCheck.status,
+        friendlyName: svcCheck.body && svcCheck.body.friendly_name,
+        errorMessage: svcCheck.body && svcCheck.body.message,
+      };
+    } catch (err) {
+      result.messagingServiceCheck = { error: String(err.message || err) };
+    }
+  } else if (fromNumber) {
+    try {
+      const numCheck = await twilioGet(`/2010-04-01/Accounts/${sid}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(fromNumber)}`);
+      result.fromNumberCheck = {
+        status: numCheck.status,
+        numbersFound: numCheck.body && Array.isArray(numCheck.body.incoming_phone_numbers) ? numCheck.body.incoming_phone_numbers.length : null,
+        errorMessage: numCheck.body && numCheck.body.message,
+      };
+    } catch (err) {
+      result.fromNumberCheck = { error: String(err.message || err) };
+    }
+  } else {
+    result.messagingConfig.warning = 'Neither TWILIO_MESSAGING_SERVICE_SID nor TWILIO_FROM_NUMBER is set';
+  }
+
+  res.json(result);
+});
+
 // Manually fire the same sweep the daily cron runs, on demand - lets us
 // confirm a fix actually sends (and see the real error if it doesn't)
 // without waiting for the next scheduled 8am run.
