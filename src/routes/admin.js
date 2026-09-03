@@ -213,6 +213,20 @@ router.post('/api/admin/catchup-welcome', requireAdmin, async (req, res) => {
   res.json(results);
 });
 
+// Marks one subscriber as due right now (next_send_at = this instant),
+// without touching anyone else's schedule. Pair this with "Run scheduler
+// now" to force an immediate, real, end-to-end test send for a single
+// person - useful whenever a fix needs verifying today instead of waiting
+// for that person's actual next_send_at to come back around.
+router.post('/api/admin/subscribers/:id/make-due-now', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT id, name FROM subscribers WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'subscriber not found' });
+
+  db.prepare('UPDATE subscribers SET next_send_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
 // Manually fire the same sweep the daily cron runs, on demand - lets us
 // confirm a fix actually sends (and see the real error if it doesn't)
 // without waiting for the next scheduled 8am run.
