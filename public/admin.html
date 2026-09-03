@@ -384,7 +384,11 @@ function renderRows() {
         </select>
         <span class="save-flag">Saved</span>
       </td>
-      <td><span class="muted">${escapeHtml(s.access_type || '—')}</span></td>
+      <td>
+        <select data-field="access_type">
+          ${optionsFor('access_type', s.access_type || 'paid', ['client', 'client_tail', 'comp', 'paid'])}
+        </select>
+      </td>
       <td class="muted">${fmtDate(s.created_at)}</td>
       <td class="muted">${fmtDateTime(s.last_sent_at)}</td>
       <td class="muted">${fmtDateTime(s.next_send_at)}</td>
