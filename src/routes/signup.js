@@ -70,56 +70,70 @@ router.post('/api/signup', async (req, res) => {
     }
     const accessType = isClientCode ? 'client' : 'paid';
 
-    const result = db.prepare(`
-      INSERT INTO subscribers (name, phone, cadence, status, access_type, email, preferred_language, content_preference, consent_given_at, consent_ip, next_send_at)
-      VALUES (?, ?, ?, 'pending_confirmation', ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
-    `).run(name, e164, cadence, accessType, email || null, language, content, req.ip);
-
+    // Free (client-code) signups still work exactly like before: create the
+    // row, send the welcome text, and notify Terry right away - no payment
+    // is ever expected from them, so there's nothing to wait on.
     if (isClientCode) {
+      const result = db.prepare(`
+        INSERT INTO subscribers (name, phone, cadence, status, access_type, email, preferred_language, content_preference, consent_given_at, consent_ip, next_send_at)
+        VALUES (?, ?, ?, 'pending_confirmation', ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+      `).run(name, e164, cadence, accessType, email || null, language, content, req.ip);
+
       markAsClient(result.lastInsertRowid, { engagementStart: new Date().toISOString().slice(0, 10) });
-    }
-    if (matchedCode) {
-      db.prepare(`
-        UPDATE client_codes
-        SET uses_count = uses_count + 1, used_at = CURRENT_TIMESTAMP, used_by_subscriber_id = ?
-        WHERE id = ?
-      `).run(result.lastInsertRowid, matchedCode.id);
-    }
-
-    // Send opt-in confirmation text immediately (also verifies the number works)
-    try {
-      const optIn = buildOptInMessage();
-      const msg = await sendSms(e164, optIn);
-      db.prepare(`UPDATE subscribers SET status = 'active' WHERE id = ?`).run(result.lastInsertRowid);
-      console.log(`[signup] opt-in sent to ${e164}, sid=${msg.sid}`);
-    } catch (smsErr) {
-      // Signup still succeeds even if the confirmation text fails to send;
-      // subscriber stays 'pending_confirmation' for manual follow-up.
-      console.error('[signup] opt-in SMS failed:', smsErr.message);
-    }
-
-    // Let Terry know a new subscriber just signed up (best-effort, never
-    // blocks or fails the signup itself).
-    notifyCoachOfNewSubscriber({ name, phone: e164, cadence, email }).catch(() => {});
-
-    const needsPayment = accessType === 'paid';
-    let checkoutUrl = null;
-    if (needsPayment) {
-      try {
-        const session = await createCheckoutSession(result.lastInsertRowid, { name, phone: e164 });
-        checkoutUrl = session.url;
-      } catch (billingErr) {
-        // Signup still succeeds; frontend can show a "contact us to complete payment"
-        // fallback if Stripe isn't configured yet (e.g. during initial setup).
-        console.error('[signup] checkout session creation failed:', billingErr.message);
+      if (matchedCode) {
+        db.prepare(`
+          UPDATE client_codes
+          SET uses_count = uses_count + 1, used_at = CURRENT_TIMESTAMP, used_by_subscriber_id = ?
+          WHERE id = ?
+        `).run(result.lastInsertRowid, matchedCode.id);
       }
+
+      try {
+        const optIn = buildOptInMessage();
+        const msg = await sendSms(e164, optIn);
+        db.prepare(`UPDATE subscribers SET status = 'active' WHERE id = ?`).run(result.lastInsertRowid);
+        console.log(`[signup] opt-in sent to ${e164}, sid=${msg.sid}`);
+      } catch (smsErr) {
+        console.error('[signup] opt-in SMS failed:', smsErr.message);
+      }
+
+      notifyCoachOfNewSubscriber({ name, phone: e164, cadence, email }).catch(() => {});
+
+      return res.json({ ok: true, subscriberId: result.lastInsertRowid, needsPayment: false, checkoutUrl: null });
+    }
+
+    // Paid signups: deliberately DO NOT touch the subscribers table here.
+    // No row, no welcome text, no "new subscriber" notification to Terry -
+    // none of that happens until Stripe actually confirms payment (see the
+    // checkout.session.completed handler in src/routes/billing.js). Every
+    // detail needed to create the record later travels as Checkout Session
+    // metadata, keyed by phone number. This is what stops someone from
+    // ever showing up as a subscriber (or getting texted) without paying -
+    // previously the row and welcome text were created immediately, before
+    // Stripe was ever involved, which is exactly how unpaid signups ended
+    // up looking like real subscribers in the admin dashboard.
+    let checkoutUrl = null;
+    try {
+      const session = await createCheckoutSession({
+        name,
+        phone: e164,
+        cadence,
+        email,
+        preferredLanguage: language,
+        contentPreference: content,
+      });
+      checkoutUrl = session.url;
+    } catch (billingErr) {
+      console.error('[signup] checkout session creation failed:', billingErr.message);
+      return res.status(500).json({
+        error: "We couldn't start checkout right now. Please try again in a moment, or contact us if this keeps happening.",
+      });
     }
 
     res.json({
       ok: true,
-      subscriberId: result.lastInsertRowid,
-      needsPayment,
-      checkoutUrl, // frontend redirects here when present
+      needsPayment: true,
+      checkoutUrl, // frontend redirects here immediately
     });
   } catch (err) {
     console.error(err);
