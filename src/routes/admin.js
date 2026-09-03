@@ -271,6 +271,39 @@ router.get('/api/admin/twilio-diagnostic', requireAdmin, async (req, res) => {
     result.accountCheck = { error: String(err.message || err) };
   }
 
+  // Same account, same Messages.json path that fails during a real send -
+  // but as a plain read-only GET over raw HTTP, bypassing the Twilio SDK
+  // entirely. If THIS works but the SDK's messages.create() still 404s,
+  // that isolates the problem to the SDK itself rather than the account.
+  try {
+    const rawMessagesCheck = await twilioGet(`/2010-04-01/Accounts/${sid}/Messages.json?PageSize=1`);
+    result.rawMessagesListCheck = {
+      status: rawMessagesCheck.status,
+      errorMessage: rawMessagesCheck.body && rawMessagesCheck.body.message,
+      messageCount: rawMessagesCheck.body && Array.isArray(rawMessagesCheck.body.messages) ? rawMessagesCheck.body.messages.length : null,
+    };
+  } catch (err) {
+    result.rawMessagesListCheck = { error: String(err.message || err) };
+  }
+
+  // Now the exact same read, but through the Twilio SDK (the same client
+  // sendSms() uses) instead of raw fetch - isolates whether the SDK itself
+  // is misbehaving (bad base URL, stale package, etc.) versus the account.
+  try {
+    const twilio = require('twilio');
+    const sdkClient = twilio(sid, token);
+    const sdkList = await sdkClient.messages.list({ limit: 1 });
+    result.sdkMessagesListCheck = { ok: true, count: sdkList.length };
+  } catch (err) {
+    result.sdkMessagesListCheck = {
+      ok: false,
+      status: err.status,
+      code: err.code,
+      message: err.message,
+      moreInfo: err.moreInfo,
+    };
+  }
+
   const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
   const fromNumber = process.env.TWILIO_FROM_NUMBER;
   result.messagingConfig = {
