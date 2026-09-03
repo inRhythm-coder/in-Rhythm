@@ -392,7 +392,10 @@ function renderRows() {
       <td class="muted">${fmtDate(s.created_at)}</td>
       <td class="muted">${fmtDateTime(s.last_sent_at)}</td>
       <td class="muted">${fmtDateTime(s.next_send_at)}</td>
-      <td><button class="danger-link" data-action="delete">Delete</button></td>
+      <td>
+        <button class="secondary" data-action="make-due-now">Send now</button>
+        <button class="danger-link" data-action="delete">Delete</button>
+      </td>
     </tr>
   `).join('');
 
@@ -406,6 +409,55 @@ function renderRows() {
   rowsEl.querySelectorAll('button[data-action="delete"]').forEach(btn => {
     btn.addEventListener('click', onDeleteClick);
   });
+  rowsEl.querySelectorAll('button[data-action="make-due-now"]').forEach(btn => {
+    btn.addEventListener('click', onMakeDueNowClick);
+  });
+}
+
+// Marks one subscriber due right now, then immediately runs the real
+// scheduler sweep - so this button is a genuine end-to-end test of one
+// person's send, not a simulation, using the exact same code path the
+// 8am cron uses.
+async function onMakeDueNowClick(e) {
+  const row = e.target.closest('tr');
+  const id = row.getAttribute('data-id');
+  const sub = ALL_SUBSCRIBERS.find(s => String(s.id) === String(id));
+  const label = sub ? `${sub.name} (${sub.phone})` : 'this subscriber';
+
+  if (!confirm(`Send a real text to ${label} right now, for real? This actually sends via Twilio.`)) return;
+
+  const btn = e.target;
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  try {
+    const dueRes = await fetch(`/api/admin/subscribers/${id}/make-due-now`, { method: 'POST', headers: headers() });
+    if (!dueRes.ok) {
+      const data = await dueRes.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to mark as due');
+    }
+
+    const sweepRes = await fetch('/api/admin/run-scheduler-now', { method: 'POST', headers: headers() });
+    const sweepData = await sweepRes.json().catch(() => ({}));
+    if (!sweepRes.ok) throw new Error(sweepData.error || 'Scheduler run failed');
+
+    const mine = (sweepData.sends || []).find(s => s.phone === (sub && sub.phone));
+    if (mine) {
+      alert(mine.status === 'sent'
+        ? `Sent successfully to ${label}.`
+        : `Send failed for ${label}: ${mine.error}`);
+    } else if (sweepData.sendsAttempted === 0) {
+      alert(`Nothing was sent to ${label} - they may still not be eligible (check their Status and Access columns).`);
+    } else {
+      alert(`Sweep ran (${sweepData.sendsAttempted} send(s) attempted), but couldn't confirm which one was ${label} - check Deploy Logs.`);
+    }
+    await loadSubscribers();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send now';
+  }
 }
 
 async function onDeleteClick(e) {
