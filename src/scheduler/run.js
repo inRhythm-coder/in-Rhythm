@@ -105,6 +105,14 @@ async function runOnce() {
     if (!isSendEligible(sub)) {
       // Not eligible (e.g. paid access lapsed) - skip sending but still
       // advance next_send_at a bit so we don't hammer the DB re-checking hourly.
+      // This used to be completely silent - a subscriber could get skipped
+      // here every single day, forever, with nothing in the logs to explain
+      // why they never received a text. Logging the reason is what actually
+      // lets us tell "silently ineligible" apart from "really did send."
+      console.log(
+        `[skipped] -> ${sub.name} (${sub.phone}) not send-eligible ` +
+        `(status=${sub.status}, access_type=${sub.access_type}, billing_status=${sub.billing_status})`
+      );
       db.prepare('UPDATE subscribers SET next_send_at = ? WHERE id = ?')
         .run(computeNextSendAt('daily', new Date()), sub.id);
       continue;
