@@ -311,18 +311,35 @@ router.get('/api/admin/twilio-diagnostic', requireAdmin, async (req, res) => {
     usingFromNumber: fromNumber || null,
   };
 
+  // Real send messages.create() 404s even though plain list/read calls
+  // above succeed - the one meaningful difference is that a real send
+  // passes messagingServiceSid in the body. If that Messaging Service SID
+  // doesn't actually belong to this account (wrong account, deleted,
+  // typo), Twilio can surface that as a 404 on the whole Messages.json
+  // create call rather than a more obvious "service not found" error.
+  // Fetching the service properly through the SDK (not raw fetch, which
+  // needs a header we weren't sending) tests exactly that theory.
   if (messagingServiceSid) {
     try {
-      const svcCheck = await twilioGet(`/v1/Services/${messagingServiceSid}`);
+      const twilio = require('twilio');
+      const sdkClient = twilio(sid, token);
+      const svc = await sdkClient.messaging.v1.services(messagingServiceSid).fetch();
       result.messagingServiceCheck = {
-        status: svcCheck.status,
-        friendlyName: svcCheck.body && svcCheck.body.friendly_name,
-        errorMessage: svcCheck.body && svcCheck.body.message,
+        ok: true,
+        friendlyName: svc.friendlyName,
+        sid: svc.sid,
       };
     } catch (err) {
-      result.messagingServiceCheck = { error: String(err.message || err) };
+      result.messagingServiceCheck = {
+        ok: false,
+        status: err.status,
+        code: err.code,
+        message: err.message,
+        moreInfo: err.moreInfo,
+      };
     }
-  } else if (fromNumber) {
+  }
+  if (fromNumber) {
     try {
       const numCheck = await twilioGet(`/2010-04-01/Accounts/${sid}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(fromNumber)}`);
       result.fromNumberCheck = {
@@ -333,7 +350,8 @@ router.get('/api/admin/twilio-diagnostic', requireAdmin, async (req, res) => {
     } catch (err) {
       result.fromNumberCheck = { error: String(err.message || err) };
     }
-  } else {
+  }
+  if (!messagingServiceSid && !fromNumber) {
     result.messagingConfig.warning = 'Neither TWILIO_MESSAGING_SERVICE_SID nor TWILIO_FROM_NUMBER is set';
   }
 
