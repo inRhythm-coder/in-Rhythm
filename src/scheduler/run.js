@@ -26,6 +26,19 @@ function computeNextSendAt(cadence, from = new Date()) {
   const nowParts = zonedParts(from, SCHEDULE_TZ);
   const targetDateUtc = new Date(Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day));
   targetDateUtc.setUTCDate(targetDateUtc.getUTCDate() + days);
+
+  // Weekday-only sending: if the computed date lands on a Saturday or
+  // Sunday, push it to the following Monday. getUTCDay() on a plain
+  // Y/M/D-only UTC date correctly reflects that calendar date's real-world
+  // weekday regardless of timezone, so this is safe to check here before
+  // the date gets converted to a specific zoned clock time below. This is
+  // the actual guarantee that no send ever goes out on a weekend - the
+  // Mon-Fri cron schedule (scheduleConfig.js) is a second, redundant layer
+  // on top of this, not the only thing preventing it.
+  const dayOfWeek = targetDateUtc.getUTCDay(); // 0 = Sunday, 6 = Saturday
+  if (dayOfWeek === 6) targetDateUtc.setUTCDate(targetDateUtc.getUTCDate() + 2); // Sat -> Mon
+  if (dayOfWeek === 0) targetDateUtc.setUTCDate(targetDateUtc.getUTCDate() + 1); // Sun -> Mon
+
   return zonedTimeToUtc(
     targetDateUtc.getUTCFullYear(),
     targetDateUtc.getUTCMonth() + 1,
