@@ -38,10 +38,14 @@ function computeNextSendAt(cadence, from = new Date()) {
 
 /**
  * Pick a message this subscriber hasn't received yet (falls back to least-
- * recently-sent if they've exhausted the approved bank), prioritizing their
- * theme preferences when set.
+ * recently-sent if they've exhausted the approved bank), in a specific
+ * category when one is given. `category` is passed explicitly (rather than
+ * always reading it off subscriber.content_preference) so a 'both'
+ * subscriber can be sent through this twice in the same run - once forced
+ * to 'leadership', once to 'spiritual' - to get one message of each,
+ * instead of one message randomly drawn from the combined pool.
  */
-function pickMessageFor(subscriber) {
+function pickMessageForCategory(subscriber, category) {
   // Only count messages that actually went out successfully. A failed send
   // attempt still gets a row in `sends` (for the error log/history), but if
   // we counted those toward "already received," a run of failed attempts -
@@ -54,10 +58,7 @@ function pickMessageFor(subscriber) {
     .all(subscriber.id).map(r => r.message_id);
 
   const language = subscriber.preferred_language === 'es' ? 'es' : 'en';
-  // 'both' (or unset) means no category filter at all - mixed rotation.
-  const contentPref = (subscriber.content_preference === 'leadership' || subscriber.content_preference === 'spiritual')
-    ? subscriber.content_preference
-    : null;
+  const contentPref = (category === 'leadership' || category === 'spiritual') ? category : null;
 
   let baseWhere = 'active = 1 AND approved = 1 AND language = ?';
   const baseParams = [language];
@@ -95,6 +96,50 @@ function pickMessageFor(subscriber) {
   return row;
 }
 
+// Convenience wrapper for the common single-message case: derives the
+// category from the subscriber's own preference ('both'/unset -> no filter,
+// mixed pool). Used for 'leadership'-only and 'spiritual'-only subscribers,
+// and kept exported since src/scripts/sendTest.js and others may call it
+// directly for a one-off single message regardless of category.
+function pickMessageFor(subscriber) {
+  const contentPref = (subscriber.content_preference === 'leadership' || subscriber.content_preference === 'spiritual')
+    ? subscriber.content_preference
+    : null;
+  return pickMessageForCategory(subscriber, contentPref);
+}
+
+/**
+ * Sends a single message to a subscriber in a given category and records
+ * the result (sent or failed) in `sends`. Shared by both the single-message
+ * path (leadership-only / spiritual-only / unset) and the two-message path
+ * ('both' - one leadership + one spiritual) below, so success/failure
+ * logging stays identical either way.
+ */
+async function sendOneMessage(sub, category) {
+  const message = category ? pickMessageForCategory(sub, category) : pickMessageFor(sub);
+  if (!message) {
+    console.warn(`[scheduler] no approved ${category || ''} messages available in bank - skipping`);
+    return null;
+  }
+
+  try {
+    const result = await sendSms(sub.phone, message.body);
+    db.prepare(`
+      INSERT INTO sends (subscriber_id, message_id, twilio_sid, status)
+      VALUES (?, ?, ?, 'sent')
+    `).run(sub.id, message.id, result.sid);
+    console.log(`[sent] -> ${sub.name} (${sub.phone}) msg #${message.id}${category ? ` (${category})` : ''}`);
+    return message;
+  } catch (err) {
+    db.prepare(`
+      INSERT INTO sends (subscriber_id, message_id, status, error)
+      VALUES (?, ?, 'failed', ?)
+    `).run(sub.id, message.id, String(err.message || err));
+    console.error(`[failed] -> ${sub.name} (${sub.phone})${category ? ` (${category})` : ''}:`, err.message);
+    return null;
+  }
+}
+
 async function runOnce() {
   const expired = expireStaleTailAccess();
   if (expired.length) {
@@ -126,34 +171,45 @@ async function runOnce() {
       continue;
     }
 
-    const message = pickMessageFor(sub);
-    if (!message) {
-      console.warn('[scheduler] no approved messages available in bank - skipping all sends');
-      break;
+    // "Both" means one leadership message AND one spiritual message, as two
+    // separate texts, every cadence cycle - not one message drawn at random
+    // from the combined pool. Everyone else (leadership-only, spiritual-only,
+    // or unset) still gets exactly one message, as before.
+    if (sub.content_preference === 'both') {
+      const leadershipMsg = await sendOneMessage(sub, 'leadership');
+      const spiritualMsg = await sendOneMessage(sub, 'spiritual');
+      const lastMessage = spiritualMsg || leadershipMsg;
+
+      // Advance the schedule regardless of whether one or both sends failed -
+      // any failure is already visible in the logs/sends table above, and an
+      // admin can always force a retry via "Send now". Only touch
+      // last_sent_* when at least one of the two actually went out, so a
+      // fully-failed day doesn't overwrite the last real send with nothing.
+      if (lastMessage) {
+        db.prepare(`
+          UPDATE subscribers
+          SET last_sent_message_id = ?, last_sent_at = CURRENT_TIMESTAMP,
+              next_send_at = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(lastMessage.id, computeNextSendAt(sub.cadence), sub.id);
+      } else {
+        db.prepare('UPDATE subscribers SET next_send_at = ? WHERE id = ?')
+          .run(computeNextSendAt(sub.cadence), sub.id);
+      }
+      continue;
     }
 
-    try {
-      const result = await sendSms(sub.phone, message.body);
-      db.prepare(`
-        INSERT INTO sends (subscriber_id, message_id, twilio_sid, status)
-        VALUES (?, ?, ?, 'sent')
-      `).run(sub.id, message.id, result.sid);
-
+    const message = await sendOneMessage(sub, null);
+    if (message) {
       db.prepare(`
         UPDATE subscribers
         SET last_sent_message_id = ?, last_sent_at = CURRENT_TIMESTAMP,
             next_send_at = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `).run(message.id, computeNextSendAt(sub.cadence), sub.id);
-
-      console.log(`[sent] -> ${sub.name} (${sub.phone}) msg #${message.id}`);
-    } catch (err) {
-      db.prepare(`
-        INSERT INTO sends (subscriber_id, message_id, status, error)
-        VALUES (?, ?, 'failed', ?)
-      `).run(sub.id, message.id, String(err.message || err));
-      console.error(`[failed] -> ${sub.name} (${sub.phone}):`, err.message);
     }
+    // On failure, next_send_at is deliberately left alone (same as before) -
+    // the subscriber stays "due" so the next sweep retries automatically.
   }
 }
 
