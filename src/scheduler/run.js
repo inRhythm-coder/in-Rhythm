@@ -42,7 +42,15 @@ function computeNextSendAt(cadence, from = new Date()) {
  * theme preferences when set.
  */
 function pickMessageFor(subscriber) {
-  const sentIds = db.prepare('SELECT message_id FROM sends WHERE subscriber_id = ?')
+  // Only count messages that actually went out successfully. A failed send
+  // attempt still gets a row in `sends` (for the error log/history), but if
+  // we counted those toward "already received," a run of failed attempts -
+  // like the several we triggered today while chasing the Twilio Messaging
+  // Service bug - would permanently mark whatever messages they happened to
+  // pick as "sent" and exclude them forever, even though the subscriber
+  // never actually got them. That skews future picks toward whatever
+  // category/messages weren't unlucky enough to get picked by a failed try.
+  const sentIds = db.prepare(`SELECT message_id FROM sends WHERE subscriber_id = ? AND status = 'sent'`)
     .all(subscriber.id).map(r => r.message_id);
 
   const language = subscriber.preferred_language === 'es' ? 'es' : 'en';
