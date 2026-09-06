@@ -84,6 +84,56 @@ CREATE TABLE IF NOT EXISTS client_codes (
   used_by_subscriber_id INTEGER REFERENCES subscribers(id)
 );
 
+-- In Rhythm for Organizations: a company/team buys bulk access, and each
+-- employee still opts themselves in individually (via the org's own
+-- client_codes-style enrollment code) - required for TCPA consent, and
+-- kept deliberately consistent with how individual client codes already
+-- work rather than inventing a second mechanism.
+--
+-- tier drives the default pricing (base fee + included seats + per-seat
+-- overage rate) via src/billing/orgPricing.js. 'culture_partner' (1,000+
+-- employees) is the one tier that's fully custom/manual - no formula, no
+-- Stripe automation - so its fee columns are just whatever was actually
+-- negotiated, entered by hand.
+--
+-- view_token is a separate, longer secret from any enrollment code, so the
+-- org's own point of contact can see aggregate seat usage without that
+-- same link letting every enrolled employee see how many colleagues have
+-- signed up.
+CREATE TABLE IF NOT EXISTS organizations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  tier TEXT NOT NULL CHECK (tier IN ('team','organization','enterprise','culture_partner')),
+
+  seat_limit INTEGER NOT NULL,            -- total employees allowed to enroll right now
+  included_seats INTEGER NOT NULL,        -- seats covered by the base fee
+  base_fee_cents INTEGER,                 -- monthly base fee, in cents (NULL for an as-yet-unpriced custom deal)
+  per_seat_cents INTEGER NOT NULL DEFAULT 0, -- overage rate per seat/month, in cents (0 for culture_partner)
+
+  contact_name TEXT,
+  contact_email TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','canceled')),
+
+  -- Billing is NOT automated for any tier yet (see src/billing/orgPricing.js
+  -- header comment for why) - these just track however Terry actually
+  -- billed the org (a Stripe Payment Link, a manual invoice, a wire, etc.).
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  billing_notes TEXT,
+
+  contract_start DATE,
+  contract_end DATE,
+
+  view_token TEXT UNIQUE,                 -- lets the org's contact see aggregate seat usage, see src/routes/orgView.js
+
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_sends_subscriber ON sends(subscriber_id);
 CREATE INDEX IF NOT EXISTS idx_subscribers_next_send ON subscribers(next_send_at);
 CREATE INDEX IF NOT EXISTS idx_subscribers_status ON subscribers(status);
+-- Indexes on client_codes.org_id / subscribers.org_id are created in
+-- src/db/index.js, AFTER those columns are added by migration - both
+-- columns are new additions to tables that already existed before
+-- Organizations shipped, so they can't be relied on to exist yet here.
