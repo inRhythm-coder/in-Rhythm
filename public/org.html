@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In Rhythm for Organizations — Your Plan</title>
+<style>
+  :root {
+    --ink: #1c2b2a; --paper: #faf7f1; --accent: #2f6f5e;
+    --accent-dark: #204c40; --muted: #6b7573; --line: #e3ddd0; --bad: #b3413a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--paper); color: var(--ink); line-height: 1.5;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.lead { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; margin-bottom: 20px; }
+  .card h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin: 0 0 14px; }
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 130px; background: #f2ede2; border-radius: 10px; padding: 14px 16px; }
+  .stat .n { font-size: 24px; font-weight: 700; }
+  .stat .l { font-size: 12px; color: var(--muted); }
+  .bar { height: 10px; border-radius: 6px; background: #eee2; background: #eee; overflow: hidden; margin-top: 16px; }
+  .bar-fill { height: 100%; background: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  th { font-size: 11px; text-transform: uppercase; color: var(--muted); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .badge.active { background: #eef5f1; color: var(--accent-dark); }
+  .badge.off { background: #eee; color: var(--muted); }
+  .err, .loading { color: var(--muted); font-size: 14px; }
+  .err { color: var(--bad); }
+  .contact { font-size: 13px; color: var(--muted); margin-top: 24px; }
+  code { background: #f2ede2; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>In Rhythm for Organizations</h1>
+  <p class="lead">A read-only snapshot of your plan and enrollment - no employee names or numbers shown here.</p>
+
+  <div id="loading" class="loading">Loading...</div>
+  <div id="err" class="err" style="display:none;"></div>
+  <div id="content" style="display:none;"></div>
+
+  <p class="contact">Questions, or need to add seats? Contact Dr. Terry Daniels at
+    <a href="mailto:tdaniels@focalpointcoaching.com">tdaniels@focalpointcoaching.com</a>.</p>
+</div>
+
+<script>
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtDate(s) {
+  if (!s) return '—';
+  const d = new Date(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
+  return isNaN(d) ? s : d.toLocaleDateString();
+}
+
+async function load() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token');
+  const loadingEl = document.getElementById('loading');
+  const errEl = document.getElementById('err');
+  const contentEl = document.getElementById('content');
+
+  if (!token) {
+    loadingEl.style.display = 'none';
+    errEl.style.display = 'block';
+    errEl.textContent = 'This link is missing its access token. Use the exact link Dr. Terry Daniels sent you.';
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/org/status?token=${encodeURIComponent(token)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error === 'not found' ? "We couldn't find a plan for this link." : 'Something went wrong loading your plan.');
+
+    const org = data.organization;
+    const pct = org.seatLimit ? Math.min(100, Math.round((org.seatsUsed / org.seatLimit) * 100)) : 0;
+    const tierLabel = { team: 'Team', organization: 'Organization', enterprise: 'Enterprise', culture_partner: 'Culture Partner' }[org.tier] || org.tier;
+    const statusBadge = org.status === 'active' ? '<span class="badge active">Active</span>' : `<span class="badge off">${escapeHtml(org.status)}</span>`;
+
+    contentEl.innerHTML = `
+      <div class="card">
+        <h2>${escapeHtml(org.name)} — ${escapeHtml(tierLabel)} Plan ${statusBadge}</h2>
+        <div class="stats">
+          <div class="stat"><div class="n">${org.seatsUsed}</div><div class="l">Seats used</div></div>
+          <div class="stat"><div class="n">${org.seatsRemaining}</div><div class="l">Seats remaining</div></div>
+          <div class="stat"><div class="n">${org.seatLimit}</div><div class="l">Seat limit</div></div>
+          <div class="stat"><div class="n">${org.monthlyCostFormatted}</div><div class="l">Monthly plan cost</div></div>
+        </div>
+        <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
+        ${org.contractStart ? `<p style="font-size:12px; color:var(--muted); margin:14px 0 0;">Contract start: ${fmtDate(org.contractStart)}${org.contractEnd ? ` · end: ${fmtDate(org.contractEnd)}` : ''}</p>` : ''}
+      </div>
+
+      <div class="card">
+        <h2>Enrollment codes</h2>
+        <table>
+          <thead><tr><th>Code</th><th>Note</th><th>Uses</th><th>Status</th></tr></thead>
+          <tbody>
+            ${data.codes.length ? data.codes.map(c => `
+              <tr>
+                <td><code>${escapeHtml(c.code)}</code></td>
+                <td>${escapeHtml(c.note || '—')}</td>
+                <td>${c.uses_count} / ${c.max_uses}</td>
+                <td>${c.active ? (c.uses_count >= c.max_uses ? '<span class="badge off">Used up</span>' : '<span class="badge active">Active</span>') : '<span class="badge off">Revoked</span>'}</td>
+              </tr>
+            `).join('') : '<tr><td colspan="4" style="color:var(--muted);">No codes issued yet.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+    loadingEl.style.display = 'none';
+    contentEl.style.display = 'block';
+  } catch (err) {
+    loadingEl.style.display = 'none';
+    errEl.style.display = 'block';
+    errEl.textContent = err.message;
+  }
+}
+load();
+</script>
+</body>
+</html>
