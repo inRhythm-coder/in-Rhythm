@@ -1,7 +1,9 @@
 const express = require('express');
+const crypto = require('crypto');
 const db = require('../db');
 const { sendSms, buildCatchupWelcomeMessage } = require('../sms/twilio');
 const { runOnce } = require('../scheduler/run');
+const { ORG_TIERS, monthlyCostCents, formatCents } = require('../billing/orgPricing');
 
 const router = express.Router();
 
@@ -167,6 +169,176 @@ router.post('/api/admin/client-codes/:id/revoke', requireAdmin, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'code not found' });
   db.prepare('UPDATE client_codes SET active = 0 WHERE id = ?').run(id);
   res.json({ ok: true });
+});
+
+// --- Organizations (In Rhythm for Organizations) ------------------------
+// A company/team buys bulk access; each employee still opts themselves in
+// individually via the org's own enrollment code (a client_codes row with
+// org_id set) - same mechanism individual client codes already use, just
+// with a much higher max_uses and a link back to the org. See
+// src/billing/orgPricing.js for the confirmed pricing/scaling model and
+// why Stripe billing isn't automated yet.
+
+const ORG_TIER_VALUES = Object.keys(ORG_TIERS);
+
+function generateViewToken() {
+  return crypto.randomBytes(16).toString('hex'); // 32 hex chars, URL-safe
+}
+
+function orgWithUsage(org) {
+  const seatsUsed = db.prepare(`
+    SELECT COUNT(*) AS n FROM subscribers WHERE org_id = ? AND status != 'unsubscribed'
+  `).get(org.id).n;
+  const cost = org.base_fee_cents != null
+    ? org.base_fee_cents + Math.max(0, org.seat_limit - org.included_seats) * (org.per_seat_cents || 0)
+    : null;
+  return {
+    ...org,
+    seatsUsed,
+    seatsRemaining: Math.max(0, org.seat_limit - seatsUsed),
+    monthlyCostCents: cost,
+    monthlyCostFormatted: formatCents(cost),
+  };
+}
+
+router.get('/api/admin/organizations', requireAdmin, (req, res) => {
+  const orgs = db.prepare('SELECT * FROM organizations ORDER BY created_at DESC').all();
+  res.json({ organizations: orgs.map(orgWithUsage) });
+});
+
+router.get('/api/admin/organizations/:id', requireAdmin, (req, res) => {
+  const org = db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
+  if (!org) return res.status(404).json({ error: 'organization not found' });
+
+  const codes = db.prepare(`
+    SELECT * FROM client_codes WHERE org_id = ? ORDER BY created_at DESC
+  `).all(org.id);
+  const subscribers = db.prepare(`
+    SELECT id, name, phone, email, status, cadence, content_preference, created_at
+    FROM subscribers WHERE org_id = ? ORDER BY created_at DESC
+  `).all(org.id);
+
+  res.json({ organization: orgWithUsage(org), codes, subscribers });
+});
+
+// Create a new organization. For team/organization/enterprise, base fee /
+// included seats / per-seat rate default from the confirmed pricing tiers
+// (ORG_TIERS) unless explicitly overridden - e.g. a negotiated discount.
+// For culture_partner, there's no default: baseFeeCents must be supplied
+// (or left null and filled in later once the deal is actually negotiated).
+router.post('/api/admin/organizations', requireAdmin, (req, res) => {
+  const {
+    name, tier, seatLimit, contactName, contactEmail,
+    baseFeeCents, includedSeats, perSeatCents,
+    contractStart, contractEnd, billingNotes,
+  } = req.body;
+
+  if (!name || !name.trim()) return res.status(400).json({ error: 'organization name is required' });
+  if (!ORG_TIER_VALUES.includes(tier)) {
+    return res.status(400).json({ error: `tier must be one of: ${ORG_TIER_VALUES.join(', ')}` });
+  }
+  const seats = Number.isInteger(seatLimit) && seatLimit > 0 ? seatLimit : null;
+  if (!seats) return res.status(400).json({ error: 'seatLimit must be a positive integer' });
+
+  const defaults = ORG_TIERS[tier];
+  const finalIncludedSeats = Number.isInteger(includedSeats) ? includedSeats : (defaults.includedSeats ?? seats);
+  const finalPerSeatCents = Number.isInteger(perSeatCents) ? perSeatCents : (defaults.perSeatCents ?? 0);
+  const finalBaseFeeCents = Number.isInteger(baseFeeCents) ? baseFeeCents : defaults.baseFeeCents;
+
+  if (finalBaseFeeCents == null && tier !== 'culture_partner') {
+    return res.status(400).json({ error: 'baseFeeCents could not be determined for this tier' });
+  }
+
+  let viewToken;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = generateViewToken();
+    const exists = db.prepare('SELECT 1 FROM organizations WHERE view_token = ?').get(candidate);
+    if (!exists) { viewToken = candidate; break; }
+  }
+
+  const result = db.prepare(`
+    INSERT INTO organizations (
+      name, tier, seat_limit, included_seats, base_fee_cents, per_seat_cents,
+      contact_name, contact_email, contract_start, contract_end, billing_notes, view_token
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    name.trim(), tier, seats, finalIncludedSeats, finalBaseFeeCents, finalPerSeatCents,
+    contactName || null, contactEmail || null, contractStart || null, contractEnd || null,
+    billingNotes || null, viewToken
+  );
+
+  const created = db.prepare('SELECT * FROM organizations WHERE id = ?').get(result.lastInsertRowid);
+  res.json({ ok: true, organization: orgWithUsage(created) });
+});
+
+router.patch('/api/admin/organizations/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT id FROM organizations WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'organization not found' });
+
+  const allowed = [
+    'name', 'seat_limit', 'included_seats', 'base_fee_cents', 'per_seat_cents',
+    'contact_name', 'contact_email', 'status', 'stripe_customer_id',
+    'stripe_subscription_id', 'billing_notes', 'contract_start', 'contract_end',
+  ];
+  const fields = [];
+  const values = [];
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) {
+      fields.push(`${key} = ?`);
+      values.push(req.body[key]);
+    }
+  }
+  if (req.body.tier !== undefined) {
+    if (!ORG_TIER_VALUES.includes(req.body.tier)) {
+      return res.status(400).json({ error: `tier must be one of: ${ORG_TIER_VALUES.join(', ')}` });
+    }
+    fields.push('tier = ?'); values.push(req.body.tier);
+  }
+  if (req.body.status !== undefined && !['active', 'paused', 'canceled'].includes(req.body.status)) {
+    return res.status(400).json({ error: 'invalid status' });
+  }
+  if (!fields.length) return res.status(400).json({ error: 'nothing to update' });
+
+  fields.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(id);
+  db.prepare(`UPDATE organizations SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+
+  const updated = db.prepare('SELECT * FROM organizations WHERE id = ?').get(id);
+  res.json({ ok: true, organization: orgWithUsage(updated) });
+});
+
+// Issue an enrollment code tied to this org - same generateCode() used for
+// individual client codes, just stamped with org_id so signups through it
+// link the new subscriber back to the organization and count against its
+// seat limit. Defaults maxUses to however many seats are left unused.
+router.post('/api/admin/organizations/:id/codes', requireAdmin, (req, res) => {
+  const org = db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
+  if (!org) return res.status(404).json({ error: 'organization not found' });
+
+  const { note, maxUses } = req.body;
+  const seatsUsed = db.prepare(`SELECT COUNT(*) AS n FROM subscribers WHERE org_id = ? AND status != 'unsubscribed'`).get(org.id).n;
+  const remaining = Math.max(0, org.seat_limit - seatsUsed);
+  const uses = Number.isInteger(maxUses) && maxUses > 0 ? Math.min(maxUses, remaining || maxUses) : remaining;
+
+  if (uses <= 0) {
+    return res.status(400).json({ error: 'This organization has no remaining seats. Raise seatLimit first.' });
+  }
+
+  let code;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = generateCode();
+    const exists = db.prepare('SELECT 1 FROM client_codes WHERE code = ?').get(candidate);
+    if (!exists) { code = candidate; break; }
+  }
+  if (!code) return res.status(500).json({ error: 'Could not generate a unique code, try again' });
+
+  const result = db.prepare(`
+    INSERT INTO client_codes (code, note, max_uses, org_id) VALUES (?, ?, ?, ?)
+  `).run(code, (note || '').trim() || org.name, uses, org.id);
+
+  const created = db.prepare('SELECT * FROM client_codes WHERE id = ?').get(result.lastInsertRowid);
+  res.json({ ok: true, code: created });
 });
 
 // Permanently removes a subscriber record - for cleaning up accidental
