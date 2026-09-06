@@ -72,12 +72,21 @@ router.post('/api/signup', async (req, res) => {
 
     // Free (client-code) signups still work exactly like before: create the
     // row, send the welcome text, and notify Terry right away - no payment
-    // is ever expected from them, so there's nothing to wait on.
+    // is ever expected from them, so there's nothing to wait on. If the
+    // code that matched belongs to an organization (In Rhythm for
+    // Organizations), the new subscriber is linked to it via org_id, so
+    // they count against that org's seat limit and show up in the org's
+    // own aggregate view - they're still an individually-consenting,
+    // individually-configurable subscriber, exactly like any client-code
+    // signup, just billed as part of the org's plan instead of Terry's
+    // direct client roster.
     if (isClientCode) {
+      const orgId = matchedCode && matchedCode.org_id ? matchedCode.org_id : null;
+
       const result = db.prepare(`
-        INSERT INTO subscribers (name, phone, cadence, status, access_type, email, preferred_language, content_preference, consent_given_at, consent_ip, next_send_at)
-        VALUES (?, ?, ?, 'pending_confirmation', ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
-      `).run(name, e164, cadence, accessType, email || null, language, content, req.ip);
+        INSERT INTO subscribers (name, phone, cadence, status, access_type, email, preferred_language, content_preference, consent_given_at, consent_ip, next_send_at, org_id)
+        VALUES (?, ?, ?, 'pending_confirmation', ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP, ?)
+      `).run(name, e164, cadence, accessType, email || null, language, content, req.ip, orgId);
 
       markAsClient(result.lastInsertRowid, { engagementStart: new Date().toISOString().slice(0, 10) });
       if (matchedCode) {
