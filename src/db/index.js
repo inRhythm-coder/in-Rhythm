@@ -33,6 +33,17 @@ addColumnIfMissing('subscribers', 'welcome_catchup_sent_at', 'DATETIME');
 addColumnIfMissing('messages', 'language', "TEXT NOT NULL DEFAULT 'en'");
 addColumnIfMissing('messages', 'category', "TEXT NOT NULL DEFAULT 'leadership'");
 
+// In Rhythm for Organizations: links an employee (subscriber) or an
+// enrollment code back to the organization that's paying for their seat.
+// Both nullable - everyone who isn't part of an org just has NULL here,
+// same as always. Added as a migration (rather than only in the CREATE
+// TABLE in schema.sql) because both subscribers and client_codes already
+// existed in production before Organizations shipped.
+addColumnIfMissing('subscribers', 'org_id', 'INTEGER REFERENCES organizations(id)');
+addColumnIfMissing('client_codes', 'org_id', 'INTEGER REFERENCES organizations(id)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_client_codes_org ON client_codes(org_id)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_subscribers_org ON subscribers(org_id)');
+
 // One-time-per-boot cleanup: the daily scheduler sweep (src/server.js) only
 // fires ONCE a day, at a fixed hour. If a subscriber's next_send_at ever
 // carries a different time-of-day (e.g. 9:05am when the sweep runs at
