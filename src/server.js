@@ -9,25 +9,7 @@ const { runOnce } = require('./scheduler/run');
 const signupRouter = require('./routes/signup');
 const { webhookRouter, apiRouter: billingApiRouter } = require('./routes/billing');
 const adminRouter = require('./routes/admin');
-
-// If the process dies silently (a native crash, an unhandled rejection, an
-// uncaught exception), Railway just shows the last log line forever and the
-// dashboard can still say "Active" - there's nothing telling anyone the
-// process is actually gone. These handlers make sure something is ALWAYS
-// printed right before the process exits, so a dead process leaves a clear
-// trail in Deploy Logs instead of just going silent.
-process.on('uncaughtException', (err) => {
-  console.error('[fatal] uncaughtException:', err && err.stack ? err.stack : err);
-  process.exit(1);
-});
-process.on('unhandledRejection', (reason) => {
-  console.error('[fatal] unhandledRejection:', reason && reason.stack ? reason.stack : reason);
-  process.exit(1);
-});
-process.on('SIGTERM', () => {
-  console.log('[process] received SIGTERM, shutting down');
-  process.exit(0);
-});
+const orgViewRouter = require('./routes/orgView');
 
 const app = express();
 
@@ -47,6 +29,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(signupRouter);
 app.use(billingApiRouter);
 app.use(adminRouter);
+app.use(orgViewRouter);
 
 app.get('/healthz', (req, res) => res.json({ ok: true, app: process.env.APP_NAME || 'In Rhythm' }));
 
@@ -75,13 +58,3 @@ cron.schedule(SCHEDULE, () => {
 setTimeout(() => {
   runOnce().catch(err => console.error('[scheduler] initial sweep error:', err));
 }, 10000);
-
-// Heartbeat: prints once an hour so Deploy Logs make it obvious whether the
-// process is actually still alive, instead of going quiet between one
-// day's sweep and the next with nothing to check in between. If a future
-// morning's message doesn't go out, "when did the heartbeats stop" answers
-// in one glance whether the process crashed/died vs. the cron itself
-// silently not firing.
-setInterval(() => {
-  console.log(`[heartbeat] alive at ${new Date().toISOString()}`);
-}, 60 * 60 * 1000);
