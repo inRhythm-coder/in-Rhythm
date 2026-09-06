@@ -89,7 +89,6 @@
       <input type="search" id="search" placeholder="Search name, phone, or email...">
       <div class="right">
         <button class="secondary" id="catchupBtn">Send catch-up welcome</button>
-        <button class="secondary" id="runSchedulerBtn">Run scheduler now</button>
         <button class="secondary" id="refreshBtn">Refresh</button>
         <button class="secondary" id="lockBtn">Lock</button>
       </div>
@@ -159,6 +158,72 @@
         <tbody id="codeRows"></tbody>
       </table>
     </div>
+
+    <h2 style="font-size:18px; margin:36px 0 4px;">In Rhythm for Organizations</h2>
+    <p class="lead" style="margin-bottom:14px;">
+      Set up a company or team plan, then issue it an enrollment code (below) with as many uses as seats.
+      Each employee still opts in individually with that code, same as any client code.
+      Stripe isn't wired up for organizations yet — bill these with a Payment Link or invoice for the
+      monthly cost shown, and log it in Billing notes.
+    </p>
+
+    <div class="gate" style="max-width:640px; padding:18px 20px; margin-bottom:20px;">
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
+        <div style="flex:2; min-width:160px;">
+          <label for="orgName" style="margin-bottom:6px;">Organization name</label>
+          <input id="orgName" placeholder="e.g. Acme Corp">
+        </div>
+        <div style="flex:1; min-width:150px;">
+          <label for="orgTier" style="margin-bottom:6px;">Tier</label>
+          <select id="orgTier" style="width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:15px;">
+            <option value="team">Team (25–99)</option>
+            <option value="organization">Organization (100–499)</option>
+            <option value="enterprise">Enterprise (500–999)</option>
+            <option value="culture_partner">Culture Partner (1,000+)</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:100px;">
+          <label for="orgSeatLimit" style="margin-bottom:6px;">Seat limit</label>
+          <input id="orgSeatLimit" type="number" min="1" value="25">
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-top:12px;">
+        <div style="flex:1; min-width:160px;">
+          <label for="orgContactName" style="margin-bottom:6px;">Contact name</label>
+          <input id="orgContactName" placeholder="optional">
+        </div>
+        <div style="flex:1; min-width:160px;">
+          <label for="orgContactEmail" style="margin-bottom:6px;">Contact email</label>
+          <input id="orgContactEmail" placeholder="optional">
+        </div>
+        <div style="flex:1; min-width:140px;" id="orgCustomFeeWrap">
+          <label for="orgBaseFee" style="margin-bottom:6px;">Monthly base fee ($)</label>
+          <input id="orgBaseFee" type="number" min="0" step="0.01" placeholder="e.g. 25000/12">
+        </div>
+        <div>
+          <button id="createOrgBtn" style="margin-top:0;">Create organization</button>
+        </div>
+      </div>
+      <div id="createOrgResult" class="muted" style="margin-top:12px; display:none;"></div>
+    </div>
+
+    <div id="orgsLoadErr" class="muted" style="display:none;"></div>
+    <div id="orgsWrap" style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Organization</th>
+            <th>Tier</th>
+            <th>Seats</th>
+            <th>Monthly cost</th>
+            <th>Status</th>
+            <th>Contact</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="orgRows"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -191,6 +256,7 @@ async function tryUnlock(token) {
   await loadSummary();
   await loadSubscribers();
   await loadClientCodes();
+  await loadOrganizations();
   return true;
 }
 
@@ -212,45 +278,9 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
   loadSummary();
   loadSubscribers();
   loadClientCodes();
+  loadOrganizations();
 });
 document.getElementById('catchupBtn').addEventListener('click', runCatchupWelcome);
-document.getElementById('runSchedulerBtn').addEventListener('click', runSchedulerNow);
-
-async function runSchedulerNow() {
-  const msgEl = document.getElementById('catchupMsg');
-  const confirmed = confirm(
-    "This immediately runs the same daily send sweep the 8am scheduler runs - anyone currently due a message gets " +
-    "texted right now, for real. Use this to test that sending works without waiting for the next scheduled run.\n\nRun it now?"
-  );
-  if (!confirmed) return;
-
-  const btn = document.getElementById('runSchedulerBtn');
-  btn.disabled = true;
-  btn.textContent = 'Running...';
-  msgEl.style.display = 'block';
-  msgEl.textContent = 'Running scheduler sweep...';
-
-  try {
-    const res = await fetch('/api/admin/run-scheduler-now', { method: 'POST', headers: headers() });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || 'Scheduler run failed');
-
-    if (data.sendsAttempted === 0) {
-      msgEl.textContent = 'Sweep ran with no errors - no one was due a message right now.';
-    } else {
-      const sent = data.sends.filter(s => s.status === 'sent').length;
-      const failed = data.sends.filter(s => s.status === 'failed').length;
-      msgEl.textContent = `Sweep ran: ${sent} sent, ${failed} failed` +
-        (failed ? ' - check the sends for error details.' : '.');
-    }
-    await loadSubscribers();
-  } catch (err) {
-    msgEl.textContent = `Error: ${err.message}`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Run scheduler now';
-  }
-}
 
 async function runCatchupWelcome() {
   const msgEl = document.getElementById('catchupMsg');
@@ -384,18 +414,11 @@ function renderRows() {
         </select>
         <span class="save-flag">Saved</span>
       </td>
-      <td>
-        <select data-field="access_type">
-          ${optionsFor('access_type', s.access_type || 'paid', ['client', 'client_tail', 'comp', 'paid'])}
-        </select>
-      </td>
+      <td><span class="muted">${escapeHtml(s.access_type || '—')}</span></td>
       <td class="muted">${fmtDate(s.created_at)}</td>
       <td class="muted">${fmtDateTime(s.last_sent_at)}</td>
       <td class="muted">${fmtDateTime(s.next_send_at)}</td>
-      <td>
-        <button class="secondary" data-action="make-due-now">Send now</button>
-        <button class="danger-link" data-action="delete">Delete</button>
-      </td>
+      <td><button class="danger-link" data-action="delete">Delete</button></td>
     </tr>
   `).join('');
 
@@ -409,55 +432,6 @@ function renderRows() {
   rowsEl.querySelectorAll('button[data-action="delete"]').forEach(btn => {
     btn.addEventListener('click', onDeleteClick);
   });
-  rowsEl.querySelectorAll('button[data-action="make-due-now"]').forEach(btn => {
-    btn.addEventListener('click', onMakeDueNowClick);
-  });
-}
-
-// Marks one subscriber due right now, then immediately runs the real
-// scheduler sweep - so this button is a genuine end-to-end test of one
-// person's send, not a simulation, using the exact same code path the
-// 8am cron uses.
-async function onMakeDueNowClick(e) {
-  const row = e.target.closest('tr');
-  const id = row.getAttribute('data-id');
-  const sub = ALL_SUBSCRIBERS.find(s => String(s.id) === String(id));
-  const label = sub ? `${sub.name} (${sub.phone})` : 'this subscriber';
-
-  if (!confirm(`Send a real text to ${label} right now, for real? This actually sends via Twilio.`)) return;
-
-  const btn = e.target;
-  btn.disabled = true;
-  btn.textContent = 'Sending...';
-
-  try {
-    const dueRes = await fetch(`/api/admin/subscribers/${id}/make-due-now`, { method: 'POST', headers: headers() });
-    if (!dueRes.ok) {
-      const data = await dueRes.json().catch(() => ({}));
-      throw new Error(data.error || 'Failed to mark as due');
-    }
-
-    const sweepRes = await fetch('/api/admin/run-scheduler-now', { method: 'POST', headers: headers() });
-    const sweepData = await sweepRes.json().catch(() => ({}));
-    if (!sweepRes.ok) throw new Error(sweepData.error || 'Scheduler run failed');
-
-    const mine = (sweepData.sends || []).find(s => s.phone === (sub && sub.phone));
-    if (mine) {
-      alert(mine.status === 'sent'
-        ? `Sent successfully to ${label}.`
-        : `Send failed for ${label}: ${mine.error}`);
-    } else if (sweepData.sendsAttempted === 0) {
-      alert(`Nothing was sent to ${label} - they may still not be eligible (check their Status and Access columns).`);
-    } else {
-      alert(`Sweep ran (${sweepData.sendsAttempted} send(s) attempted), but couldn't confirm which one was ${label} - check Deploy Logs.`);
-    }
-    await loadSubscribers();
-  } catch (err) {
-    alert(err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Send now';
-  }
 }
 
 async function onDeleteClick(e) {
@@ -612,6 +586,149 @@ async function onRevokeCode(e) {
       throw new Error(data.error || 'Failed to revoke code');
     }
     await loadClientCodes();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// --- Organizations (In Rhythm for Organizations) -------------------------
+
+let ALL_ORGS = [];
+const TIER_LABELS = { team: 'Team', organization: 'Organization', enterprise: 'Enterprise', culture_partner: 'Culture Partner' };
+
+document.getElementById('orgTier').addEventListener('change', (e) => {
+  // Culture Partner has no formula - make that obvious by relabeling the
+  // fee field instead of leaving it looking like an optional override.
+  const label = document.querySelector('label[for="orgBaseFee"]');
+  if (e.target.value === 'culture_partner') {
+    label.textContent = 'Monthly base fee ($) — required, fully custom';
+  } else {
+    label.textContent = 'Monthly base fee ($) — leave blank to use standard pricing';
+  }
+});
+
+async function loadOrganizations() {
+  const errEl = document.getElementById('orgsLoadErr');
+  errEl.style.display = 'none';
+  try {
+    const res = await fetch('/api/admin/organizations', { headers: headers() });
+    if (!res.ok) throw new Error('Failed to load organizations');
+    const data = await res.json();
+    ALL_ORGS = data.organizations || [];
+    renderOrgRows();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+function renderOrgRows() {
+  const rowsEl = document.getElementById('orgRows');
+  if (!ALL_ORGS.length) {
+    rowsEl.innerHTML = `<tr><td colspan="7" class="muted">No organizations yet.</td></tr>`;
+    return;
+  }
+
+  rowsEl.innerHTML = ALL_ORGS.map(o => {
+    const statusBadge = o.status === 'active' ? `<span class="badge active">Active</span>`
+      : o.status === 'paused' ? `<span class="badge paused">Paused</span>`
+      : `<span class="badge unsubscribed">Canceled</span>`;
+    const contact = [o.contact_name, o.contact_email].filter(Boolean).map(escapeHtml).join(' · ') || '—';
+    return `
+      <tr data-org-id="${o.id}">
+        <td>${escapeHtml(o.name)}</td>
+        <td>${TIER_LABELS[o.tier] || escapeHtml(o.tier)}</td>
+        <td>${o.seatsUsed} / ${o.seat_limit}</td>
+        <td>${escapeHtml(o.monthlyCostFormatted)}</td>
+        <td>${statusBadge}</td>
+        <td class="muted">${contact}</td>
+        <td>
+          <button class="danger-link" style="color:var(--accent-dark);" data-action="issue-code" data-org-id="${o.id}">Issue code</button>
+          <button class="danger-link" style="color:var(--accent-dark);" data-action="copy-link" data-org-id="${o.id}">Copy view link</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  rowsEl.querySelectorAll('button[data-action="issue-code"]').forEach(btn => btn.addEventListener('click', onIssueOrgCode));
+  rowsEl.querySelectorAll('button[data-action="copy-link"]').forEach(btn => btn.addEventListener('click', onCopyOrgLink));
+}
+
+document.getElementById('createOrgBtn').addEventListener('click', async () => {
+  const resultEl = document.getElementById('createOrgResult');
+  const btn = document.getElementById('createOrgBtn');
+  const name = document.getElementById('orgName').value.trim();
+  const tier = document.getElementById('orgTier').value;
+  const seatLimit = parseInt(document.getElementById('orgSeatLimit').value, 10);
+  const contactName = document.getElementById('orgContactName').value.trim();
+  const contactEmail = document.getElementById('orgContactEmail').value.trim();
+  const feeDollars = document.getElementById('orgBaseFee').value.trim();
+
+  const body = { name, tier, seatLimit, contactName, contactEmail };
+  if (feeDollars) body.baseFeeCents = Math.round(parseFloat(feeDollars) * 100);
+
+  if (!name) { alert('Organization name is required.'); return; }
+  if (tier === 'culture_partner' && !feeDollars) {
+    alert('Culture Partner has no standard pricing - enter the negotiated monthly base fee.');
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/organizations', {
+      method: 'POST', headers: headers(), body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to create organization');
+
+    resultEl.style.display = 'block';
+    resultEl.textContent = `Created ${data.organization.name} (${data.organization.monthlyCostFormatted}/month). Now issue it an enrollment code below.`;
+    document.getElementById('orgName').value = '';
+    document.getElementById('orgContactName').value = '';
+    document.getElementById('orgContactEmail').value = '';
+    document.getElementById('orgBaseFee').value = '';
+    await loadOrganizations();
+  } catch (err) {
+    resultEl.style.display = 'block';
+    resultEl.textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function onIssueOrgCode(e) {
+  const orgId = e.target.getAttribute('data-org-id');
+  const org = ALL_ORGS.find(o => String(o.id) === String(orgId));
+  const note = prompt(`Note for this code (e.g. a department or location)?`, org ? org.name : '');
+  if (note === null) return;
+
+  try {
+    const res = await fetch(`/api/admin/organizations/${orgId}/codes`, {
+      method: 'POST', headers: headers(), body: JSON.stringify({ note }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to issue code');
+    alert(`Code issued: ${data.code.code}\n\nGood for up to ${data.code.max_uses} sign-ups. Share it with ${org ? org.name : 'the organization'} so employees can enroll themselves.`);
+    await loadClientCodes();
+    await loadOrganizations();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function onCopyOrgLink(e) {
+  const orgId = e.target.getAttribute('data-org-id');
+  try {
+    const res = await fetch(`/api/admin/organizations/${orgId}`, { headers: headers() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to load organization');
+    const link = `${location.origin}/org.html?token=${data.organization.view_token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      alert(`Copied this organization's view link to your clipboard:\n\n${link}\n\nSend this to their point of contact - it shows seat usage only, no employee names or numbers.`);
+    } catch (copyErr) {
+      alert(`View link (copy manually):\n\n${link}`);
+    }
   } catch (err) {
     alert(err.message);
   }
